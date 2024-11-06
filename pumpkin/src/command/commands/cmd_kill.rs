@@ -31,7 +31,7 @@ impl CommandExecutor for KillExecutor {
         let target_count = targets.len();
 
         for target in targets {
-            target.living_entity.kill().await;
+            target.kill().await;
         }
 
         let msg = if target_count == 1 {
