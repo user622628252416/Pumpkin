@@ -123,7 +123,6 @@ pub fn default_dispatcher<'a>() -> Arc<CommandDispatcher<'a>> {
     dispatcher.register(cmd_clear::init_command_tree());
     dispatcher.register(cmd_setblock::init_command_tree());
     dispatcher.register(cmd_transfer::init_command_tree());
-    dispatcher.register(cmd_summon::init_command_tree());
 
     Arc::new(dispatcher)
 }

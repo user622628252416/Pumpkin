@@ -32,7 +32,6 @@ pub(crate) mod arg_position_3d;
 pub(crate) mod arg_postition_block;
 pub(crate) mod arg_rotation;
 pub(crate) mod arg_simple;
-pub(crate) mod arg_summonable_entity;
 pub(crate) mod arg_nbt;
 mod coordinate;
 
