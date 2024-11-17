@@ -60,9 +60,9 @@ where
 impl<'a, T: ToFromNumber> FindArg<'a> for BoundedNumArgumentConsumer<T> {
     type Data = Result<T, NotInBounds>;
 
-    fn find_arg(args: &super::ConsumedArgs, name: &str) -> Result<Self::Data, CommandError> {
-        let Some(Arg::Num(result)) = args.get(name) else {
-            return Err(CommandError::InvalidConsumption(Some(name.to_string())));
+    fn find_optional_arg(args: &super::ConsumedArgs, name: &str) -> Option<Result<Self::Data, CommandError>> {
+        let Arg::Num(result) = args.get(name)? else {
+            return Some(Err(CommandError::InvalidConsumption(Some(name.to_string()))));
         };
 
         let data: Self::Data = match result {
@@ -70,13 +70,13 @@ impl<'a, T: ToFromNumber> FindArg<'a> for BoundedNumArgumentConsumer<T> {
                 if let Some(x) = T::from_number(num) {
                     Ok(x)
                 } else {
-                    return Err(CommandError::InvalidConsumption(Some(name.to_string())));
+                    return Some(Err(CommandError::InvalidConsumption(Some(name.to_string()))));
                 }
             }
             Err(()) => Err(()),
         };
 
-        Ok(data)
+        Some(Ok(data))
     }
 }
 

@@ -32,6 +32,8 @@ pub(crate) mod arg_position_3d;
 pub(crate) mod arg_postition_block;
 pub(crate) mod arg_rotation;
 pub(crate) mod arg_simple;
+pub(crate) mod arg_summonable_entity;
+pub(crate) mod arg_nbt;
 mod coordinate;
 
 /// see [`crate::commands::tree_builder::argument`]
@@ -82,6 +84,8 @@ pub(crate) enum Arg<'a> {
     CommandTree(&'a CommandTree<'a>),
     Item(String),
     Block(String),
+    SummonableEntity(String),
+    Nbt(String),
     Msg(String),
     Num(Result<Number, NotInBounds>),
     #[allow(unused)]
@@ -104,16 +108,26 @@ impl<K: Eq + Hash, V: Clone> GetCloned<K, V> for HashMap<K, V> {
 pub(crate) trait FindArg<'a> {
     type Data;
 
-    fn find_arg(args: &'a ConsumedArgs, name: &'a str) -> Result<Self::Data, CommandError>;
+    fn find_optional_arg(args: &'a ConsumedArgs, name: &'a str) -> Option<Result<Self::Data, CommandError>>;
+
+    fn find_arg(args: &'a ConsumedArgs, name: &'a str) -> Result<Self::Data, CommandError> {
+        Self::find_optional_arg(args, name).unwrap_or_else(|| Err(CommandError::InvalidConsumption(Some(name.into()))))
+    }
 }
 
 pub(crate) trait FindArgDefaultName<'a, T> {
     fn find_arg_default_name(&self, args: &'a ConsumedArgs) -> Result<T, CommandError>;
+
+    fn find_optional_arg_default_name(&self, args: &'a ConsumedArgs) -> Option<Result<T, CommandError>>;
 }
 
 impl<'a, T, C: FindArg<'a, Data = T> + DefaultNameArgConsumer> FindArgDefaultName<'a, T> for C {
     fn find_arg_default_name(&self, args: &'a ConsumedArgs) -> Result<T, CommandError> {
         C::find_arg(args, self.default_name())
+    }
+
+    fn find_optional_arg_default_name(&self, args: &'a ConsumedArgs) -> Option<Result<T, CommandError>> {
+        C::find_optional_arg(args, self.default_name())
     }
 }
 

@@ -78,10 +78,11 @@ impl DefaultNameArgConsumer for CommandTreeArgumentConsumer {
 impl<'a> FindArg<'a> for CommandTreeArgumentConsumer {
     type Data = &'a CommandTree<'a>;
 
-    fn find_arg(args: &'a super::ConsumedArgs, name: &'a str) -> Result<Self::Data, CommandError> {
+    fn find_optional_arg(args: &'a super::ConsumedArgs, name: &'a str) -> Option<Result<Self::Data, CommandError>> {
         match args.get(name) {
-            Some(Arg::CommandTree(tree)) => Ok(tree),
-            _ => Err(CommandError::InvalidConsumption(Some(name.to_string()))),
+            Some(Arg::CommandTree(tree)) => Some(Ok(tree)),
+            Some(_) => Some(Err(CommandError::InvalidConsumption(Some(name.to_string())))),
+            None => None
         }
     }
 }

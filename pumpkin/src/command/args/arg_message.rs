@@ -67,10 +67,11 @@ impl DefaultNameArgConsumer for MsgArgConsumer {
 impl<'a> FindArg<'a> for MsgArgConsumer {
     type Data = &'a str;
 
-    fn find_arg(args: &'a super::ConsumedArgs, name: &'a str) -> Result<Self::Data, CommandError> {
+    fn find_optional_arg(args: &'a super::ConsumedArgs, name: &'a str) -> Option<Result<Self::Data, CommandError>> {
         match args.get(name) {
-            Some(Arg::Msg(data)) => Ok(data),
-            _ => Err(CommandError::InvalidConsumption(Some(name.to_string()))),
+            Some(Arg::Msg(data)) => Some(Ok(data)),
+            Some(_) => Some(Err(CommandError::InvalidConsumption(Some(name.to_string())))),
+            None => None
         }
     }
 }

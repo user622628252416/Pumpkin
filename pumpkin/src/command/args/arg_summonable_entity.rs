@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use pumpkin_protocol::client::play::{
     CommandSuggestion, ProtoCmdArgParser, ProtoCmdArgSuggestionType,
 };
-use pumpkin_world::item::item_registry::{self, Item};
 
 use crate::{command::dispatcher::CommandError, server::Server};
 
@@ -14,11 +13,13 @@ use super::{
     Arg, DefaultNameArgConsumer, FindArg, GetClientSideArgParser,
 };
 
-pub(crate) struct ItemArgumentConsumer;
+pub(crate) struct SummonableEntityArgConsumer;
 
-impl GetClientSideArgParser for ItemArgumentConsumer {
+impl GetClientSideArgParser for SummonableEntityArgConsumer {
     fn get_client_side_parser(&self) -> ProtoCmdArgParser {
-        ProtoCmdArgParser::Resource { identifier: "item" }
+        ProtoCmdArgParser::Resource {
+            identifier: "entity_type",
+        }
     }
 
     fn get_client_side_suggestion_type_override(&self) -> Option<ProtoCmdArgSuggestionType> {
@@ -27,23 +28,17 @@ impl GetClientSideArgParser for ItemArgumentConsumer {
 }
 
 #[async_trait]
-impl ArgumentConsumer for ItemArgumentConsumer {
+impl ArgumentConsumer for SummonableEntityArgConsumer {
     async fn consume<'a>(
         &self,
         _sender: &CommandSender<'a>,
         _server: &'a Server,
         args: &mut RawArgs<'a>,
     ) -> Option<Arg<'a>> {
-        let s = args.pop()?;
+        let entity = args.pop()?.to_string();
 
-        let name = if s.contains(':') {
-            s.to_string()
-        } else {
-            format!("minecraft:{s}")
-        };
 
-        // todo: get an actual item
-        Some(Arg::Item(name))
+        Some(Arg::SummonableEntity(entity))
     }
 
     async fn suggest<'a>(
@@ -56,27 +51,22 @@ impl ArgumentConsumer for ItemArgumentConsumer {
     }
 }
 
-impl DefaultNameArgConsumer for ItemArgumentConsumer {
+impl DefaultNameArgConsumer for SummonableEntityArgConsumer {
     fn default_name(&self) -> &'static str {
-        "item"
+        "entity"
     }
 
     fn get_argument_consumer(&self) -> &dyn ArgumentConsumer {
-        self
+        &SummonableEntityArgConsumer
     }
 }
 
-impl<'a> FindArg<'a> for ItemArgumentConsumer {
-    type Data = &'a Item;
+impl<'a> FindArg<'a> for SummonableEntityArgConsumer {
+    type Data = &'a str;
 
     fn find_optional_arg(args: &'a super::ConsumedArgs, name: &'a str) -> Option<Result<Self::Data, CommandError>> {
         match args.get(name) {
-            Some(Arg::Item(name)) => Some(match item_registry::get_item(name) {
-                Some(item) => Ok(item),
-                None => Err(CommandError::GeneralCommandIssue(format!(
-                    "Item {name} does not exist."
-                ))),
-            }),
+            Some(Arg::SummonableEntity(data)) => Some(Ok(data)),
             Some(_) => Some(Err(CommandError::InvalidConsumption(Some(name.to_string())))),
             None => None,
         }
