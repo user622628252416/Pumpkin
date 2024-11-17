@@ -69,7 +69,10 @@ impl DefaultNameArgConsumer for ItemArgumentConsumer {
 impl<'a> FindArg<'a> for ItemArgumentConsumer {
     type Data = &'a Item;
 
-    fn find_optional_arg(args: &'a super::ConsumedArgs, name: &'a str) -> Option<Result<Self::Data, CommandError>> {
+    fn find_optional_arg(
+        args: &'a super::ConsumedArgs,
+        name: &'a str,
+    ) -> Option<Result<Self::Data, CommandError>> {
         match args.get(name) {
             Some(Arg::Item(name)) => Some(match item_registry::get_item(name) {
                 Some(item) => Ok(item),
@@ -77,7 +80,9 @@ impl<'a> FindArg<'a> for ItemArgumentConsumer {
                     "Item {name} does not exist."
                 ))),
             }),
-            Some(_) => Some(Err(CommandError::InvalidConsumption(Some(name.to_string())))),
+            Some(_) => Some(Err(CommandError::InvalidConsumption(Some(
+                name.to_string(),
+            )))),
             None => None,
         }
     }

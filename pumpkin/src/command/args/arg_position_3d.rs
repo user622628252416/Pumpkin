@@ -88,11 +88,16 @@ impl DefaultNameArgConsumer for Position3DArgumentConsumer {
 impl<'a> FindArg<'a> for Position3DArgumentConsumer {
     type Data = Vector3<f64>;
 
-    fn find_optional_arg(args: &'a super::ConsumedArgs, name: &'a str) -> Option<Result<Self::Data, CommandError>> {
+    fn find_optional_arg(
+        args: &'a super::ConsumedArgs,
+        name: &'a str,
+    ) -> Option<Result<Self::Data, CommandError>> {
         match args.get(name) {
             Some(Arg::Pos3D(data)) => Some(Ok(*data)),
-            Some(_) => Some(Err(CommandError::InvalidConsumption(Some(name.to_string())))),
-            None => None
+            Some(_) => Some(Err(CommandError::InvalidConsumption(Some(
+                name.to_string(),
+            )))),
+            None => None,
         }
     }
 }

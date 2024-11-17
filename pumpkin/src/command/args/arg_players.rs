@@ -89,10 +89,15 @@ impl DefaultNameArgConsumer for PlayersArgumentConsumer {
 impl<'a> FindArg<'a> for PlayersArgumentConsumer {
     type Data = &'a [Arc<Player>];
 
-    fn find_optional_arg(args: &'a super::ConsumedArgs, name: &'a str) -> Option<Result<Self::Data, CommandError>> {
+    fn find_optional_arg(
+        args: &'a super::ConsumedArgs,
+        name: &'a str,
+    ) -> Option<Result<Self::Data, CommandError>> {
         match args.get(name) {
             Some(Arg::Players(data)) => Some(Ok(data)),
-            Some(_) => Some(Err(CommandError::InvalidConsumption(Some(name.to_string())))),
+            Some(_) => Some(Err(CommandError::InvalidConsumption(Some(
+                name.to_string(),
+            )))),
             None => None,
         }
     }

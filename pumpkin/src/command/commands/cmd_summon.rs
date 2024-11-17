@@ -25,13 +25,13 @@ impl CommandExecutor for SummonExecutor {
         args: &ConsumedArgs<'a>,
     ) -> Result<(), CommandError> {
         let _entity = SummonableEntityArgConsumer.find_arg_default_name(args)?;
-    
+
         let _pos = match Position3DArgumentConsumer.find_optional_arg_default_name(args) {
             Some(pos) => pos?,
             None => match sender.position() {
                 Some(pos) => pos,
                 None => return Err(CommandError::InvalidRequirement),
-            }
+            },
         };
 
         let _nbt = match NbtArgConsumer.find_optional_arg_default_name(args) {
@@ -39,26 +39,27 @@ impl CommandExecutor for SummonExecutor {
             None => "",
         };
 
-
         sender
-            .send_message(TextComponent::text("Entites are unfortunately not implemented yet."))
+            .send_message(TextComponent::text(
+                "Entites are unfortunately not implemented yet.",
+            ))
             .await;
 
         Ok(())
     }
 }
 
+#[allow(clippy::redundant_closure_for_method_calls)]
 pub fn init_command_tree<'a>() -> CommandTree<'a> {
     CommandTree::new(NAMES, DESCRIPTION).with_child(
         require(&|sender| sender.has_permission_lvl(PermissionLvl::Two)).with_child(
-            argument_default_name(&SummonableEntityArgConsumer).with_child(
-                require(&|sender| sender.is_player()).execute(&SummonExecutor)
-            ).with_child(
-                argument_default_name(&Position3DArgumentConsumer).with_child(
-                    argument_default_name(&NbtArgConsumer)
-                        .execute(&SummonExecutor)
-                ).execute(&SummonExecutor)
-            ),
+            argument_default_name(&SummonableEntityArgConsumer)
+                .with_child(require(&|sender| sender.is_player()).execute(&SummonExecutor))
+                .with_child(
+                    argument_default_name(&Position3DArgumentConsumer)
+                        .with_child(argument_default_name(&NbtArgConsumer).execute(&SummonExecutor))
+                        .execute(&SummonExecutor),
+                ),
         ),
     )
 }

@@ -37,7 +37,6 @@ impl ArgumentConsumer for SummonableEntityArgConsumer {
     ) -> Option<Arg<'a>> {
         let entity = args.pop()?.to_string();
 
-
         Some(Arg::SummonableEntity(entity))
     }
 
@@ -64,10 +63,15 @@ impl DefaultNameArgConsumer for SummonableEntityArgConsumer {
 impl<'a> FindArg<'a> for SummonableEntityArgConsumer {
     type Data = &'a str;
 
-    fn find_optional_arg(args: &'a super::ConsumedArgs, name: &'a str) -> Option<Result<Self::Data, CommandError>> {
+    fn find_optional_arg(
+        args: &'a super::ConsumedArgs,
+        name: &'a str,
+    ) -> Option<Result<Self::Data, CommandError>> {
         match args.get(name) {
             Some(Arg::SummonableEntity(data)) => Some(Ok(data)),
-            Some(_) => Some(Err(CommandError::InvalidConsumption(Some(name.to_string())))),
+            Some(_) => Some(Err(CommandError::InvalidConsumption(Some(
+                name.to_string(),
+            )))),
             None => None,
         }
     }

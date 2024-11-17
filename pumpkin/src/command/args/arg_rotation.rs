@@ -73,11 +73,16 @@ impl DefaultNameArgConsumer for RotationArgumentConsumer {
 impl<'a> FindArg<'a> for RotationArgumentConsumer {
     type Data = (f32, f32);
 
-    fn find_optional_arg(args: &'a super::ConsumedArgs, name: &'a str) -> Option<Result<Self::Data, CommandError>> {
+    fn find_optional_arg(
+        args: &'a super::ConsumedArgs,
+        name: &'a str,
+    ) -> Option<Result<Self::Data, CommandError>> {
         match args.get(name) {
             Some(Arg::Rotation(yaw, pitch)) => Some(Ok((*yaw, *pitch))),
-            Some(_) => Some(Err(CommandError::InvalidConsumption(Some(name.to_string())))),
-            None => None
+            Some(_) => Some(Err(CommandError::InvalidConsumption(Some(
+                name.to_string(),
+            )))),
+            None => None,
         }
     }
 }
