@@ -58,3 +58,9 @@ mod particle;
 pub fn particle(item: TokenStream) -> TokenStream {
     particle::particle_impl(item)
 }
+
+mod cmd_arg;
+#[proc_macro_attribute]
+pub fn find_arg(attr: TokenStream, item: TokenStream) -> TokenStream {
+    cmd_arg::find_arg_impl(attr, item)
+}

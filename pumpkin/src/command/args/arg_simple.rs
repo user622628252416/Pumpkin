@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use pumpkin_macros::find_arg;
 use pumpkin_protocol::client::play::{
     CommandSuggestion, ProtoCmdArgParser, ProtoCmdArgSuggestionType, StringProtoArgBehavior,
 };
@@ -15,6 +16,7 @@ use super::{
 
 /// Should never be a permanent solution
 #[allow(unused)]
+#[find_arg(&'a str, Arg::Simple(data) => data)]
 pub(crate) struct SimpleArgConsumer;
 
 impl GetClientSideArgParser for SimpleArgConsumer {
@@ -45,17 +47,5 @@ impl ArgumentConsumer for SimpleArgConsumer {
         _input: &'a str,
     ) -> Result<Option<Vec<CommandSuggestion<'a>>>, CommandError> {
         Ok(None)
-    }
-}
-
-impl<'a> FindArg<'a> for SimpleArgConsumer {
-    type Data = &'a str;
-
-    fn find_optional_arg(args: &'a super::ConsumedArgs, name: &'a str) -> Option<Result<Self::Data, CommandError>> {
-        match args.get(name) {
-            Some(Arg::Simple(data)) => Some(Ok(data)),
-            Some(_) => Some(Err(CommandError::InvalidConsumption(Some(name.to_string())))),
-            None => None,
-        }
     }
 }

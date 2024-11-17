@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use pumpkin_macros::find_arg;
 use pumpkin_protocol::client::play::{
     CommandSuggestion, ProtoCmdArgParser, ProtoCmdArgSuggestionType,
 };
@@ -12,6 +13,7 @@ use super::super::args::ArgumentConsumer;
 use super::{Arg, DefaultNameArgConsumer, FindArg, GetClientSideArgParser};
 
 /// yaw and pitch
+#[find_arg((f32, f32), Arg::Rotation(yaw, pitch) => (*yaw, *pitch))]
 pub(crate) struct RotationArgumentConsumer;
 
 impl GetClientSideArgParser for RotationArgumentConsumer {
@@ -67,17 +69,5 @@ impl DefaultNameArgConsumer for RotationArgumentConsumer {
 
     fn get_argument_consumer(&self) -> &dyn ArgumentConsumer {
         &RotationArgumentConsumer
-    }
-}
-
-impl<'a> FindArg<'a> for RotationArgumentConsumer {
-    type Data = (f32, f32);
-
-    fn find_optional_arg(args: &'a super::ConsumedArgs, name: &'a str) -> Option<Result<Self::Data, CommandError>> {
-        match args.get(name) {
-            Some(Arg::Rotation(yaw, pitch)) => Some(Ok((*yaw, *pitch))),
-            Some(_) => Some(Err(CommandError::InvalidConsumption(Some(name.to_string())))),
-            None => None
-        }
     }
 }

@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use pumpkin_macros::find_arg;
 use pumpkin_protocol::client::play::{
     CommandSuggestion, ProtoCmdArgParser, ProtoCmdArgSuggestionType,
 };
@@ -13,6 +14,7 @@ use super::{
     Arg, DefaultNameArgConsumer, FindArg, GetClientSideArgParser,
 };
 
+#[find_arg(&'a str, Arg::SummonableEntity(data) => data)]
 pub(crate) struct SummonableEntityArgConsumer;
 
 impl GetClientSideArgParser for SummonableEntityArgConsumer {
@@ -58,17 +60,5 @@ impl DefaultNameArgConsumer for SummonableEntityArgConsumer {
 
     fn get_argument_consumer(&self) -> &dyn ArgumentConsumer {
         &SummonableEntityArgConsumer
-    }
-}
-
-impl<'a> FindArg<'a> for SummonableEntityArgConsumer {
-    type Data = &'a str;
-
-    fn find_optional_arg(args: &'a super::ConsumedArgs, name: &'a str) -> Option<Result<Self::Data, CommandError>> {
-        match args.get(name) {
-            Some(Arg::SummonableEntity(data)) => Some(Ok(data)),
-            Some(_) => Some(Err(CommandError::InvalidConsumption(Some(name.to_string())))),
-            None => None,
-        }
     }
 }
