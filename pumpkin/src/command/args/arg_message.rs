@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use pumpkin_macros::find_arg;
 use pumpkin_protocol::client::play::{
     CommandSuggestion, ProtoCmdArgParser, ProtoCmdArgSuggestionType, StringProtoArgBehavior,
 };
@@ -10,10 +11,11 @@ use super::{
         args::{ArgumentConsumer, RawArgs},
         CommandSender,
     },
-    Arg, DefaultNameArgConsumer, FindArg, GetClientSideArgParser,
+    Arg, DefaultNameArgConsumer, GetClientSideArgParser,
 };
 
 /// Consumes all remaining words/args. Does not consume if there is no word.
+#[find_arg(&'a str, Arg::Msg(data) => data)]
 pub(crate) struct MsgArgConsumer;
 
 impl GetClientSideArgParser for MsgArgConsumer {
@@ -57,21 +59,5 @@ impl ArgumentConsumer for MsgArgConsumer {
 impl DefaultNameArgConsumer for MsgArgConsumer {
     fn default_name(&self) -> &'static str {
         "msg"
-    }
-
-    fn get_argument_consumer(&self) -> &dyn ArgumentConsumer {
-        &MsgArgConsumer
-    }
-}
-
-impl<'a> FindArg<'a> for MsgArgConsumer {
-    type Data = &'a str;
-
-    fn find_optional_arg(args: &'a super::ConsumedArgs, name: &'a str) -> Option<Result<Self::Data, CommandError>> {
-        match args.get(name) {
-            Some(Arg::Msg(data)) => Some(Ok(data)),
-            Some(_) => Some(Err(CommandError::InvalidConsumption(Some(name.to_string())))),
-            None => None
-        }
     }
 }

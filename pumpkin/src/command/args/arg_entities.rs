@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use pumpkin_macros::find_arg;
 use pumpkin_protocol::client::play::{
     CommandSuggestion, ProtoCmdArgParser, ProtoCmdArgSuggestionType,
 };
@@ -13,11 +14,12 @@ use crate::server::Server;
 
 use super::super::args::ArgumentConsumer;
 use super::arg_players::PlayersArgumentConsumer;
-use super::{Arg, DefaultNameArgConsumer, FindArg, GetClientSideArgParser};
+use super::{Arg, DefaultNameArgConsumer, GetClientSideArgParser};
 
 /// todo: implement (currently just calls [`super::arg_player::PlayerArgumentConsumer`])
 ///
 /// For selecting zero, one or multiple entities, eg. using @s, a player name, @a or @e
+#[find_arg(&'a [Arc<Player>], Arg::Entities(data) => data)]
 pub(crate) struct EntitiesArgumentConsumer;
 
 impl GetClientSideArgParser for EntitiesArgumentConsumer {
@@ -59,21 +61,5 @@ impl ArgumentConsumer for EntitiesArgumentConsumer {
 impl DefaultNameArgConsumer for EntitiesArgumentConsumer {
     fn default_name(&self) -> &'static str {
         "targets"
-    }
-
-    fn get_argument_consumer(&self) -> &dyn ArgumentConsumer {
-        &EntitiesArgumentConsumer
-    }
-}
-
-impl<'a> FindArg<'a> for EntitiesArgumentConsumer {
-    type Data = &'a [Arc<Player>];
-
-    fn find_optional_arg(args: &'a super::ConsumedArgs, name: &'a str) -> Option<Result<Self::Data, CommandError>> {
-        match args.get(name) {
-            Some(Arg::Entities(data)) => Some(Ok(data)),
-            Some(_) => Some(Err(CommandError::InvalidConsumption(Some(name.to_string())))),
-            None => None
-        }
     }
 }

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use pumpkin_macros::find_arg;
 use pumpkin_protocol::client::play::{
     CommandSuggestion, ProtoCmdArgParser, ProtoCmdArgSuggestionType,
 };
@@ -8,13 +9,14 @@ use pumpkin_protocol::client::play::{
 use crate::command::dispatcher::CommandError;
 use crate::command::tree::RawArgs;
 use crate::command::CommandSender;
-use crate::entity::player::Player;
 use crate::server::Server;
+use crate::entity::player::Player;
 
 use super::super::args::ArgumentConsumer;
-use super::{Arg, DefaultNameArgConsumer, FindArg, GetClientSideArgParser};
+use super::{Arg, DefaultNameArgConsumer, GetClientSideArgParser};
 
 /// Select zero, one or multiple players
+#[find_arg(&'a [Arc<Player>], Arg::Players(data) => data)]
 pub(crate) struct PlayersArgumentConsumer;
 
 impl GetClientSideArgParser for PlayersArgumentConsumer {
@@ -79,21 +81,5 @@ impl ArgumentConsumer for PlayersArgumentConsumer {
 impl DefaultNameArgConsumer for PlayersArgumentConsumer {
     fn default_name(&self) -> &'static str {
         "player"
-    }
-
-    fn get_argument_consumer(&self) -> &dyn ArgumentConsumer {
-        &PlayersArgumentConsumer
-    }
-}
-
-impl<'a> FindArg<'a> for PlayersArgumentConsumer {
-    type Data = &'a [Arc<Player>];
-
-    fn find_optional_arg(args: &'a super::ConsumedArgs, name: &'a str) -> Option<Result<Self::Data, CommandError>> {
-        match args.get(name) {
-            Some(Arg::Players(data)) => Some(Ok(data)),
-            Some(_) => Some(Err(CommandError::InvalidConsumption(Some(name.to_string())))),
-            None => None,
-        }
     }
 }

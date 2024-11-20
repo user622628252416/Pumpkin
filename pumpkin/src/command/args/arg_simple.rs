@@ -11,7 +11,7 @@ use super::{
         args::{ArgumentConsumer, RawArgs},
         CommandSender,
     },
-    Arg, FindArg, GetClientSideArgParser,
+    Arg, GetClientSideArgParser,
 };
 
 /// Should never be a permanent solution

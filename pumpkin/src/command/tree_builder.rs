@@ -2,7 +2,7 @@ use crate::command::args::ArgumentConsumer;
 use crate::command::tree::{CommandTree, Node, NodeType};
 use crate::command::CommandSender;
 
-use super::args::DefaultNameArgConsumer;
+use super::args::InternalDefaultNameArgConsumer;
 use super::CommandExecutor;
 
 impl<'a> CommandTree<'a> {
@@ -150,7 +150,7 @@ pub fn argument<'a>(name: &'a str, consumer: &'a dyn ArgumentConsumer) -> NonLea
 }
 
 /// same as [`crate::command::tree_builder::argument`], but uses default arg name of consumer
-pub fn argument_default_name(consumer: &dyn DefaultNameArgConsumer) -> NonLeafNodeBuilder<'_> {
+pub fn argument_default_name(consumer: &dyn InternalDefaultNameArgConsumer) -> NonLeafNodeBuilder<'_> {
     NonLeafNodeBuilder {
         node_type: NodeType::Argument {
             name: consumer.default_name(),

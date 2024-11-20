@@ -36,10 +36,10 @@ impl CommandExecutor for GiveExecutor {
 
         let item = ItemArgumentConsumer::find_arg(args, ARG_ITEM)?;
 
-        let item_count = match ITEM_COUNT_CONSUMER.find_arg_default_name(args) {
-            Err(_) => 1,
-            Ok(Ok(count)) => count,
-            Ok(Err(())) => {
+        let item_count = match ITEM_COUNT_CONSUMER.find_optional_arg_default_name(args)? {
+            None => 1,
+            Some(Ok(count)) => count,
+            Some(Err(())) => {
                 sender
                     .send_message(
                         TextComponent::text("Item count is too large or too small.")

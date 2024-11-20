@@ -6,12 +6,11 @@ use pumpkin_core::text::TextComponent;
 use pumpkin_inventory::Container;
 
 use crate::command::args::arg_entities::EntitiesArgumentConsumer;
-use crate::command::args::{Arg, ConsumedArgs};
+use crate::command::args::{ConsumedArgs, FindArg};
 use crate::command::tree::CommandTree;
 use crate::command::tree_builder::{argument, require};
 use crate::command::{CommandError, CommandExecutor, CommandSender};
 use crate::entity::player::Player;
-use CommandError::InvalidConsumption;
 
 const NAMES: [&str; 1] = ["clear"];
 const DESCRIPTION: &str = "Clear yours or targets inventory.";
@@ -66,8 +65,9 @@ impl CommandExecutor for ClearExecutor {
         _server: &crate::server::Server,
         args: &ConsumedArgs<'a>,
     ) -> Result<(), CommandError> {
-        let Some(Arg::Entities(targets)) = args.get(&ARG_TARGET) else {
-            return Err(InvalidConsumption(Some(ARG_TARGET.into())));
+        let targets = match EntitiesArgumentConsumer::find_optional_arg(args, ARG_TARGET)? {
+            Some(targets) => targets,
+            None => &[sender.as_player().ok_or_else(|| CommandError::InvalidRequirement)?]
         };
 
         let mut item_count = 0;
@@ -83,32 +83,9 @@ impl CommandExecutor for ClearExecutor {
     }
 }
 
-struct ClearSelfExecutor;
-
-#[async_trait]
-impl CommandExecutor for ClearSelfExecutor {
-    async fn execute<'a>(
-        &self,
-        sender: &mut CommandSender<'a>,
-        _server: &crate::server::Server,
-        _args: &ConsumedArgs<'a>,
-    ) -> Result<(), CommandError> {
-        let target = sender.as_player().ok_or(CommandError::InvalidRequirement)?;
-
-        let item_count = clear_player(&target).await;
-
-        let hold_target = [target];
-        let msg = clear_command_text_output(item_count, &hold_target);
-
-        sender.send_message(msg).await;
-
-        Ok(())
-    }
-}
-
 #[allow(clippy::redundant_closure_for_method_calls)] // causes lifetime issues
 pub fn init_command_tree<'a>() -> CommandTree<'a> {
     CommandTree::new(NAMES, DESCRIPTION)
         .with_child(argument(ARG_TARGET, &EntitiesArgumentConsumer).execute(&ClearExecutor))
-        .with_child(require(&|sender| sender.is_player()).execute(&ClearSelfExecutor))
+        .with_child(require(&|sender| sender.is_player()).execute(&ClearExecutor))
 }

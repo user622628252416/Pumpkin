@@ -29,10 +29,9 @@ pub(crate) mod arg_message;
 pub(crate) mod arg_players;
 pub(crate) mod arg_position_2d;
 pub(crate) mod arg_position_3d;
-pub(crate) mod arg_postition_block;
+pub(crate) mod arg_position_block;
 pub(crate) mod arg_rotation;
 pub(crate) mod arg_simple;
-pub(crate) mod arg_nbt;
 mod coordinate;
 
 /// see [`crate::commands::tree_builder::argument`]
@@ -65,9 +64,26 @@ pub(crate) trait GetClientSideArgParser {
 
 pub(crate) trait DefaultNameArgConsumer: ArgumentConsumer {
     fn default_name(&self) -> &'static str;
+}
+
+/// This is generically implemented for all [`DefaultNameArgConsumer`]s.
+/// 
+/// Do not implement this directly, instead implement [`DefaultNameArgConsumer`]. The only reason this exists is for casting a [`DefaultNameArgConsumer`] to an [`ArgumentConsumer`], as trait upcasting is not stable in rust (yet).
+pub(crate) trait InternalDefaultNameArgConsumer: ArgumentConsumer {
+    fn default_name(&self) -> &'static str;
 
     /// needed because trait upcasting is not stable
     fn get_argument_consumer(&self) -> &dyn ArgumentConsumer;
+}
+
+impl <T: DefaultNameArgConsumer + ArgumentConsumer> InternalDefaultNameArgConsumer for T {
+    fn default_name(&self) -> &'static str {
+        T::default_name(self)
+    }
+
+    fn get_argument_consumer(&self) -> &dyn ArgumentConsumer {
+        self
+    }
 }
 
 #[derive(Clone)]
@@ -83,8 +99,6 @@ pub(crate) enum Arg<'a> {
     CommandTree(&'a CommandTree<'a>),
     Item(String),
     Block(String),
-    SummonableEntity(String),
-    Nbt(String),
     Msg(String),
     Num(Result<Number, NotInBounds>),
     #[allow(unused)]
@@ -107,25 +121,28 @@ impl<K: Eq + Hash, V: Clone> GetCloned<K, V> for HashMap<K, V> {
 pub(crate) trait FindArg<'a> {
     type Data;
 
-    fn find_optional_arg(args: &'a ConsumedArgs, name: &'a str) -> Option<Result<Self::Data, CommandError>>;
+    fn find_optional_arg(args: &'a ConsumedArgs, name: &'a str) -> Result<Option<Self::Data>, CommandError>;
 
     fn find_arg(args: &'a ConsumedArgs, name: &'a str) -> Result<Self::Data, CommandError> {
-        Self::find_optional_arg(args, name).unwrap_or_else(|| Err(CommandError::InvalidConsumption(Some(name.into()))))
+        match Self::find_optional_arg(args, name)? {
+            Some(value) => Ok(value),
+            None => return Err(CommandError::InvalidConsumption(Some(name.into()))),
+        }
     }
 }
 
 pub(crate) trait FindArgDefaultName<'a, T> {
     fn find_arg_default_name(&self, args: &'a ConsumedArgs) -> Result<T, CommandError>;
 
-    fn find_optional_arg_default_name(&self, args: &'a ConsumedArgs) -> Option<Result<T, CommandError>>;
+    fn find_optional_arg_default_name(&self, args: &'a ConsumedArgs) -> Result<Option<T>, CommandError>;
 }
 
-impl<'a, T, C: FindArg<'a, Data = T> + DefaultNameArgConsumer> FindArgDefaultName<'a, T> for C {
+impl<'a, T, C: FindArg<'a, Data = T> + InternalDefaultNameArgConsumer> FindArgDefaultName<'a, T> for C {
     fn find_arg_default_name(&self, args: &'a ConsumedArgs) -> Result<T, CommandError> {
         C::find_arg(args, self.default_name())
     }
 
-    fn find_optional_arg_default_name(&self, args: &'a ConsumedArgs) -> Option<Result<T, CommandError>> {
+    fn find_optional_arg_default_name(&self, args: &'a ConsumedArgs) -> Result<Option<T>, CommandError> {
         C::find_optional_arg(args, self.default_name())
     }
 }

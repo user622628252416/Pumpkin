@@ -60,9 +60,12 @@ where
 impl<'a, T: ToFromNumber> FindArg<'a> for BoundedNumArgumentConsumer<T> {
     type Data = Result<T, NotInBounds>;
 
-    fn find_optional_arg(args: &super::ConsumedArgs, name: &str) -> Option<Result<Self::Data, CommandError>> {
-        let Arg::Num(result) = args.get(name)? else {
-            return Some(Err(CommandError::InvalidConsumption(Some(name.to_string()))));
+    fn find_optional_arg(args: &super::ConsumedArgs, name: &str) -> Result<Option<Self::Data>, CommandError> {
+
+        let result = match args.get(name) {
+            None => return Ok(None),
+            Some(Arg::Num(result)) => result,
+            _ => return Err(CommandError::InvalidConsumption(Some(name.into())))
         };
 
         let data: Self::Data = match result {
@@ -70,13 +73,13 @@ impl<'a, T: ToFromNumber> FindArg<'a> for BoundedNumArgumentConsumer<T> {
                 if let Some(x) = T::from_number(num) {
                     Ok(x)
                 } else {
-                    return Some(Err(CommandError::InvalidConsumption(Some(name.to_string()))));
+                    return Err(CommandError::InvalidConsumption(Some(name.to_string())));
                 }
             }
             Err(()) => Err(()),
         };
 
-        Some(Ok(data))
+        Ok(Some(data))
     }
 }
 
@@ -241,9 +244,5 @@ where
     fn default_name(&self) -> &'static str {
         // setting a single default name for all BoundedNumArgumentConsumer variants is probably a bad idea since it would lead to confusion
         self.name.expect("Only use *_default variants of methods with a BoundedNumArgumentConsumer that has a name.")
-    }
-
-    fn get_argument_consumer(&self) -> &dyn ArgumentConsumer {
-        self
     }
 }

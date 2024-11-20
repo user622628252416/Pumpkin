@@ -60,25 +60,21 @@ impl DefaultNameArgConsumer for ItemArgumentConsumer {
     fn default_name(&self) -> &'static str {
         "item"
     }
-
-    fn get_argument_consumer(&self) -> &dyn ArgumentConsumer {
-        self
-    }
 }
 
 impl<'a> FindArg<'a> for ItemArgumentConsumer {
     type Data = &'a Item;
 
-    fn find_optional_arg(args: &'a super::ConsumedArgs, name: &'a str) -> Option<Result<Self::Data, CommandError>> {
+    fn find_optional_arg(args: &'a super::ConsumedArgs, name: &'a str) -> Result<Option<Self::Data>, CommandError> {
         match args.get(name) {
-            Some(Arg::Item(name)) => Some(match item_registry::get_item(name) {
-                Some(item) => Ok(item),
+            Some(Arg::Item(name)) => match item_registry::get_item(name) {
+                Some(item) => Ok(Some(item)),
                 None => Err(CommandError::GeneralCommandIssue(format!(
                     "Item {name} does not exist."
                 ))),
-            }),
-            Some(_) => Some(Err(CommandError::InvalidConsumption(Some(name.to_string())))),
-            None => None,
+            },
+            Some(_) => Err(CommandError::InvalidConsumption(Some(name.to_string()))),
+            None => Ok(None),
         }
     }
 }

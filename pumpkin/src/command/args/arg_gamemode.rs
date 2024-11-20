@@ -3,6 +3,7 @@ use std::str::FromStr;
 use async_trait::async_trait;
 use num_traits::FromPrimitive;
 use pumpkin_core::GameMode;
+use pumpkin_macros::find_arg;
 use pumpkin_protocol::client::play::{
     CommandSuggestion, ProtoCmdArgParser, ProtoCmdArgSuggestionType,
 };
@@ -12,8 +13,9 @@ use crate::{
     server::Server,
 };
 
-use super::{Arg, ArgumentConsumer, DefaultNameArgConsumer, FindArg, GetClientSideArgParser};
+use super::{Arg, ArgumentConsumer, DefaultNameArgConsumer, GetClientSideArgParser};
 
+#[find_arg(GameMode, Arg::GameMode(data) => *data)]
 pub(crate) struct GamemodeArgumentConsumer;
 
 impl GetClientSideArgParser for GamemodeArgumentConsumer {
@@ -62,21 +64,5 @@ impl ArgumentConsumer for GamemodeArgumentConsumer {
 impl DefaultNameArgConsumer for GamemodeArgumentConsumer {
     fn default_name(&self) -> &'static str {
         "gamemode"
-    }
-
-    fn get_argument_consumer(&self) -> &dyn ArgumentConsumer {
-        &GamemodeArgumentConsumer
-    }
-}
-
-impl<'a> FindArg<'a> for GamemodeArgumentConsumer {
-    type Data = GameMode;
-
-    fn find_optional_arg(args: &'a super::ConsumedArgs, name: &'a str) -> Option<Result<Self::Data, CommandError>> {
-        match args.get(name) {
-            Some(Arg::GameMode(data)) => Some(Ok(*data)),
-            Some(_) => Some(Err(CommandError::InvalidConsumption(Some(name.to_string())))),
-            None => None,
-        }
     }
 }

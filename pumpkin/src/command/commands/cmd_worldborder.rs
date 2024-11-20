@@ -10,9 +10,7 @@ use pumpkin_core::{
 use crate::{
     command::{
         args::{
-            arg_bounded_num::BoundedNumArgumentConsumer,
-            arg_position_2d::Position2DArgumentConsumer, ConsumedArgs, DefaultNameArgConsumer,
-            FindArgDefaultName,
+            arg_bounded_num::BoundedNumArgumentConsumer, arg_position_2d::Position2DArgumentConsumer, ConsumedArgs, DefaultNameArgConsumer, FindArgDefaultName
         },
         tree::CommandTree,
         tree_builder::{argument_default_name, literal},

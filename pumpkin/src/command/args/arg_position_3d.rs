@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use pumpkin_core::math::vector3::Vector3;
+use pumpkin_macros::find_arg;
 use pumpkin_protocol::client::play::{
     CommandSuggestion, ProtoCmdArgParser, ProtoCmdArgSuggestionType,
 };
@@ -11,9 +12,10 @@ use crate::server::Server;
 
 use super::super::args::ArgumentConsumer;
 use super::coordinate::MaybeRelativeCoordinate;
-use super::{Arg, DefaultNameArgConsumer, FindArg, GetClientSideArgParser};
+use super::{Arg, DefaultNameArgConsumer, GetClientSideArgParser};
 
 /// x, y and z coordinates
+#[find_arg(Vector3<f64>, Arg::Pos3D(data) => *data)]
 pub(crate) struct Position3DArgumentConsumer;
 
 impl GetClientSideArgParser for Position3DArgumentConsumer {
@@ -78,21 +80,5 @@ impl MaybeRelativePosition3D {
 impl DefaultNameArgConsumer for Position3DArgumentConsumer {
     fn default_name(&self) -> &'static str {
         "pos"
-    }
-
-    fn get_argument_consumer(&self) -> &dyn ArgumentConsumer {
-        &Position3DArgumentConsumer
-    }
-}
-
-impl<'a> FindArg<'a> for Position3DArgumentConsumer {
-    type Data = Vector3<f64>;
-
-    fn find_optional_arg(args: &'a super::ConsumedArgs, name: &'a str) -> Option<Result<Self::Data, CommandError>> {
-        match args.get(name) {
-            Some(Arg::Pos3D(data)) => Some(Ok(*data)),
-            Some(_) => Some(Err(CommandError::InvalidConsumption(Some(name.to_string())))),
-            None => None
-        }
     }
 }

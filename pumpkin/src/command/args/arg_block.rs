@@ -61,25 +61,21 @@ impl DefaultNameArgConsumer for BlockArgumentConsumer {
     fn default_name(&self) -> &'static str {
         "block"
     }
-
-    fn get_argument_consumer(&self) -> &dyn ArgumentConsumer {
-        self
-    }
 }
 
 impl<'a> FindArg<'a> for BlockArgumentConsumer {
     type Data = &'a Block;
 
-    fn find_optional_arg(args: &'a super::ConsumedArgs, name: &'a str) -> Option<Result<Self::Data, CommandError>> {
+    fn find_optional_arg(args: &'a super::ConsumedArgs, name: &'a str) -> Result<Option<Self::Data>, CommandError> {
         match args.get(name) {
-            Some(Arg::Block(name)) => Some(match block_registry::get_block(name) {
-                Some(block) => Ok(block),
+            Some(Arg::Block(name)) => match block_registry::get_block(name) {
+                Some(block) => Ok(Some(block)),
                 None => Err(CommandError::GeneralCommandIssue(format!(
                     "Block {name} does not exist."
                 ))),
-            }),
-            Some(_) => Some(Err(CommandError::InvalidConsumption(Some(name.to_string())))),
-            None => None,
+            },
+            Some(_) => Err(CommandError::InvalidConsumption(Some(name.to_string()))),
+            None => Ok(None),
         }
     }
 }

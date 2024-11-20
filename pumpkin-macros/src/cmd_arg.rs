@@ -30,14 +30,14 @@ pub(crate) fn find_arg_impl(attr: TokenStream, item: TokenStream) -> TokenStream
     let tokens: proc_macro2::TokenStream = quote::quote! {
         #struct_def
 
-        impl <'a> FindArg<'a> for #ident {
+        impl <'a> crate::command::args::FindArg<'a> for #ident {
             type Data = #ty;
         
-            fn find_optional_arg(args: &'a super::ConsumedArgs, name: &'a str) -> Option<Result<Self::Data, CommandError>> {
+            fn find_optional_arg(args: &'a super::ConsumedArgs, name: &'a str) -> Result<Option<Self::Data>, CommandError> {
                 match args.get(name) {
-                    Some( #pat ) => Some(Ok( #pat_body )),
-                    Some(_) => Some(Err(CommandError::InvalidConsumption(Some(name.to_string())))),
-                    None => None
+                    Some( #pat ) => Ok(Some( #pat_body )),
+                    Some(_) => Err(CommandError::InvalidConsumption(Some(name.to_string()))),
+                    None => Ok(None),
                 }
             }
         }

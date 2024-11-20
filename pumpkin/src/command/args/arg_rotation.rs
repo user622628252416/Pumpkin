@@ -10,7 +10,7 @@ use crate::command::CommandSender;
 use crate::server::Server;
 
 use super::super::args::ArgumentConsumer;
-use super::{Arg, DefaultNameArgConsumer, FindArg, GetClientSideArgParser};
+use super::{Arg, DefaultNameArgConsumer, GetClientSideArgParser};
 
 /// yaw and pitch
 #[find_arg((f32, f32), Arg::Rotation(yaw, pitch) => (*yaw, *pitch))]
@@ -65,9 +65,5 @@ impl ArgumentConsumer for RotationArgumentConsumer {
 impl DefaultNameArgConsumer for RotationArgumentConsumer {
     fn default_name(&self) -> &'static str {
         "rotation"
-    }
-
-    fn get_argument_consumer(&self) -> &dyn ArgumentConsumer {
-        &RotationArgumentConsumer
     }
 }

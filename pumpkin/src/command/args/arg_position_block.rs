@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use pumpkin_core::math::position::WorldPosition;
 use pumpkin_core::math::vector3::Vector3;
+use pumpkin_macros::find_arg;
 use pumpkin_protocol::client::play::{
     CommandSuggestion, ProtoCmdArgParser, ProtoCmdArgSuggestionType,
 };
@@ -12,9 +13,10 @@ use crate::server::Server;
 
 use super::super::args::ArgumentConsumer;
 use super::coordinate::MaybeRelativeBlockCoordinate;
-use super::{Arg, DefaultNameArgConsumer, FindArg, GetClientSideArgParser};
+use super::{Arg, DefaultNameArgConsumer, GetClientSideArgParser};
 
 /// x, y and z coordinates
+#[find_arg(WorldPosition, Arg::BlockPos(data) => *data)]
 pub(crate) struct BlockPosArgumentConsumer;
 
 impl GetClientSideArgParser for BlockPosArgumentConsumer {
@@ -79,21 +81,5 @@ impl MaybeRelativeBlockPos {
 impl DefaultNameArgConsumer for BlockPosArgumentConsumer {
     fn default_name(&self) -> &'static str {
         "block_pos"
-    }
-
-    fn get_argument_consumer(&self) -> &dyn ArgumentConsumer {
-        &BlockPosArgumentConsumer
-    }
-}
-
-impl<'a> FindArg<'a> for BlockPosArgumentConsumer {
-    type Data = WorldPosition;
-
-    fn find_optional_arg(args: &'a super::ConsumedArgs, name: &'a str) -> Option<Result<Self::Data, CommandError>> {
-        match args.get(name) {
-            Some(Arg::BlockPos(data)) => Some(Ok(*data)),
-            Some(_) => Some(Err(CommandError::InvalidConsumption(Some(name.to_string())))),
-            None => None
-        }
     }
 }
