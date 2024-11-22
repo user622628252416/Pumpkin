@@ -8,15 +8,13 @@ pub static BLOCKS: LazyLock<TopLevel> = LazyLock::new(|| {
         .expect("Could not parse blocks.json registry.")
 });
 
-pub static BLOCKS_BY_ID: LazyLock<HashMap<u16, Block>> = LazyLock::new(|| {
-    let mut map = HashMap::new();
-    for block in &BLOCKS.blocks {
-        map.insert(block.id, block.clone());
-    }
-    map
+static BLOCKS_BY_ID: LazyLock<Vec<Block>> = LazyLock::new(|| {
+    let mut vec = BLOCKS.blocks.clone();
+    vec.sort_by_key(|b| b.id);
+    vec
 });
 
-pub static BLOCK_ID_BY_REGISTRY_ID: LazyLock<HashMap<String, u16>> = LazyLock::new(|| {
+static BLOCK_ID_BY_REGISTRY_ID: LazyLock<HashMap<String, u16>> = LazyLock::new(|| {
     let mut map = HashMap::new();
     for block in &BLOCKS.blocks {
         map.insert(block.name.clone(), block.id);
@@ -24,27 +22,33 @@ pub static BLOCK_ID_BY_REGISTRY_ID: LazyLock<HashMap<String, u16>> = LazyLock::n
     map
 });
 
-pub static BLOCK_ID_BY_STATE_ID: LazyLock<HashMap<u16, u16>> = LazyLock::new(|| {
-    let mut map = HashMap::new();
+static BLOCK_ID_BY_STATE_ID: LazyLock<Vec<u16>> = LazyLock::new(|| {
+    let mut states = Vec::new();
     for block in &BLOCKS.blocks {
         for state in &block.states {
-            map.insert(state.id, block.id);
+            states.push((block.id, state.id))
         }
     }
-    map
+
+    states.sort_by_key(|(_, s_id)| *s_id);
+
+    states.iter().map(|(b_id, _)| *b_id).collect()
 });
 
-pub static STATE_INDEX_BY_STATE_ID: LazyLock<HashMap<u16, u16>> = LazyLock::new(|| {
-    let mut map = HashMap::new();
+static STATE_INDEX_BY_STATE_ID: LazyLock<Vec<usize>> = LazyLock::new(|| {
+    let mut states = Vec::new();
     for block in &BLOCKS.blocks {
-        for (index, state) in block.states.iter().enumerate() {
-            map.insert(state.id, index as u16);
+        for (i, state) in block.states.iter().enumerate() {
+            states.push((i, state.id))
         }
     }
-    map
+
+    states.sort_by_key(|(_, s_id)| *s_id);
+
+    states.iter().map(|(i, _)| *i).collect()
 });
 
-pub static BLOCK_ID_BY_ITEM_ID: LazyLock<HashMap<u16, u16>> = LazyLock::new(|| {
+static BLOCK_ID_BY_ITEM_ID: LazyLock<HashMap<u16, u16>> = LazyLock::new(|| {
     let mut map = HashMap::new();
     for block in &BLOCKS.blocks {
         map.insert(block.item_id, block.id);
@@ -53,12 +57,12 @@ pub static BLOCK_ID_BY_ITEM_ID: LazyLock<HashMap<u16, u16>> = LazyLock::new(|| {
 });
 
 pub fn get_block(registry_id: &str) -> Option<&Block> {
-    let id = BLOCK_ID_BY_REGISTRY_ID.get(registry_id)?;
-    BLOCKS_BY_ID.get(id)
+    let id = *BLOCK_ID_BY_REGISTRY_ID.get(registry_id)?;
+    BLOCKS_BY_ID.get(id as usize)
 }
 
 pub fn get_block_by_id<'a>(id: u16) -> Option<&'a Block> {
-    BLOCKS_BY_ID.get(&id)
+    BLOCKS_BY_ID.get(id as usize)
 }
 
 pub fn get_state_by_state_id<'a>(id: u16) -> Option<&'a State> {
@@ -66,21 +70,20 @@ pub fn get_state_by_state_id<'a>(id: u16) -> Option<&'a State> {
 }
 
 pub fn get_block_by_state_id<'a>(id: u16) -> Option<&'a Block> {
-    let block_id = BLOCK_ID_BY_STATE_ID.get(&id)?;
-    BLOCKS_BY_ID.get(block_id)
+    let block_id = *BLOCK_ID_BY_STATE_ID.get(id as usize)?;
+    BLOCKS_BY_ID.get(block_id as usize)
 }
 
 pub fn get_block_and_state_by_state_id<'a>(id: u16) -> Option<(&'a Block, &'a State)> {
-    let block_id = BLOCK_ID_BY_STATE_ID.get(&id)?;
-    let block = BLOCKS_BY_ID.get(block_id)?;
-    let state_index = STATE_INDEX_BY_STATE_ID.get(&id)?;
-    let state = block.states.get(*state_index as usize)?;
+    let block = get_block_by_state_id(id)?;
+    let state_index = *STATE_INDEX_BY_STATE_ID.get(id as usize)?;
+    let state = block.states.get(state_index)?;
     Some((block, state))
 }
 
 pub fn get_block_by_item<'a>(item_id: u16) -> Option<&'a Block> {
-    let block_id = BLOCK_ID_BY_ITEM_ID.get(&item_id)?;
-    BLOCKS_BY_ID.get(block_id)
+    let block_id = *BLOCK_ID_BY_ITEM_ID.get(&item_id)?;
+    BLOCKS_BY_ID.get(block_id as usize)
 }
 #[expect(dead_code)]
 #[derive(Deserialize, Clone, Debug)]
