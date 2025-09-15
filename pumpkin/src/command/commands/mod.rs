@@ -7,6 +7,7 @@ use crate::PERMISSION_REGISTRY;
 
 use super::dispatcher::CommandDispatcher;
 
+mod attribute;
 mod ban;
 mod banip;
 mod banlist;
@@ -71,6 +72,10 @@ pub async fn default_dispatcher() -> CommandDispatcher {
     dispatcher.register(me::init_command_tree(), "minecraft:command.me");
     dispatcher.register(msg::init_command_tree(), "minecraft:command.msg");
     // Two
+    dispatcher.register(
+        attribute::init_command_tree(),
+        "minecraft:command.attribute",
+    );
     dispatcher.register(kill::init_command_tree(), "minecraft:command.kill");
     dispatcher.register(
         worldborder::init_command_tree(),
@@ -204,6 +209,13 @@ fn register_level_0_permissions(registry: &mut PermissionRegistry) {
 #[allow(clippy::too_many_lines)]
 fn register_level_2_permissions(registry: &mut PermissionRegistry) {
     // Register permissions for commands with PermissionLvl::Two
+    registry
+        .register_permission(Permission::new(
+            "minecraft:command.attribute",
+            "Read and modify attributes",
+            PermissionDefault::Op(PermissionLvl::Two),
+        ))
+        .unwrap();
     registry
         .register_permission(Permission::new(
             "minecraft:command.kill",

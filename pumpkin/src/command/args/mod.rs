@@ -112,6 +112,7 @@ pub enum Arg<'a> {
     DamageType(DamageType),
     Effect(&'static StatusEffect),
     Enchantment(&'static Enchantment),
+    Attribute(String),
 }
 
 /// see [`crate::commands::tree::builder::argument`] and [`CommandTree::execute`]/[`crate::commands::tree::builder::NonLeafNodeBuilder::execute`]
