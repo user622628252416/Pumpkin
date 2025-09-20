@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use pumpkin_protocol::java::client::play::{CUpdateAttributes, CUpdateAttributesEntry};
 use pumpkin_util::text::TextComponent;
 
 use crate::command::{
@@ -180,7 +181,7 @@ impl CommandExecutor for SetBaseValueExecutor {
     async fn execute<'a>(
         &self,
         sender: &mut CommandSender,
-        _server: &crate::server::Server,
+        server: &crate::server::Server,
         args: &ConsumedArgs<'a>,
     ) -> Result<(), CommandError> {
         let target = EntityArgumentConsumer::find_arg(args, ARG_TARGET)?;
@@ -218,6 +219,18 @@ impl CommandExecutor for SetBaseValueExecutor {
                     target.get_name(),
                     TextComponent::text(value.to_string()),
                 ],
+            ))
+            .await;
+
+        // todo: actually track attributes and stuff
+        server
+            .broadcast_packet_all(&CUpdateAttributes::new(
+                target.get_entity().entity_id,
+                vec![CUpdateAttributesEntry::new(
+                    attribute,
+                    value,
+                    vec![/* todo: modifiers */],
+                )],
             ))
             .await;
 

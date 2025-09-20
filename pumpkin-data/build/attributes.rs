@@ -74,6 +74,10 @@ pub(crate) fn build() -> TokenStream {
                 }
             }
 
+            pub fn get_raw_id(&self) -> u8 {
+                self.0
+            }
+
             #consts
         }
     }
