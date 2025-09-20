@@ -11,6 +11,7 @@ use crate::entity::{
 use crate::world::World;
 use async_trait::async_trait;
 use pumpkin_data::Block;
+use pumpkin_data::attributes::Attribute;
 use pumpkin_data::entity::EntityType;
 use pumpkin_data::sound::{Sound, SoundCategory};
 use pumpkin_util::math::position::BlockPos;
@@ -23,7 +24,14 @@ pub struct Zombie {
 
 impl Zombie {
     pub async fn make(entity: Entity) -> Arc<Self> {
-        let mob_entity = MobEntity::new(entity);
+        let attribute_manager = MobEntity::hostile_mob_entity_attribute_builder()
+            .add(Attribute::FOLLOW_RANGE, 35.0)
+            .add(Attribute::MOVEMENT_SPEED, 0.23)
+            .add(Attribute::ATTACK_DAMAGE, 3.0)
+            .add(Attribute::ARMOR, 2.0)
+            .add_with_fallback_value(Attribute::SPAWN_REINFORCEMENTS)
+            .build();
+        let mob_entity = MobEntity::new(entity, attribute_manager);
         let zombie = Self { mob_entity };
         let mob_arc = Arc::new(zombie);
         let mob_weak: Weak<dyn Mob> = {

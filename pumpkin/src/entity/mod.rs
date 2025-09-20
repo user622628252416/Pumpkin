@@ -50,6 +50,7 @@ use std::sync::{
 use tokio::sync::Mutex;
 
 pub mod ai;
+pub mod attribute_manager;
 pub mod decoration;
 pub mod effect;
 pub mod experience_orb;

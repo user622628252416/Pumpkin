@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::attributes::Attributes;
+use crate::attributes::Attribute;
 use crate::data_component::DataComponent;
 use crate::data_component::DataComponent::*;
 use crate::entity_type::EntityType;
@@ -254,7 +254,7 @@ pub enum Operation {
 }
 #[derive(Clone, Debug, PartialEq)]
 pub struct Modifier {
-    pub r#type: &'static Attributes,
+    pub r#type: &'static Attribute,
     pub id: &'static str,
     pub amount: f64,
     pub operation: Operation,

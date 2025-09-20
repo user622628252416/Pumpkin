@@ -1,3 +1,4 @@
+use pumpkin_data::attributes::Attribute;
 use pumpkin_data::potion::Effect;
 use pumpkin_inventory::build_equipment_slots;
 use pumpkin_inventory::player::player_inventory::PlayerInventory;
@@ -13,6 +14,7 @@ use std::{collections::HashMap, sync::atomic::AtomicI32};
 
 use super::{Entity, NBTStorage};
 use super::{EntityBase, NBTStorageInit};
+use crate::entity::attribute_manager::{AttributeManager, AttributeManagerBuilder};
 use crate::server::Server;
 use crate::world::loot::{LootContextParameters, LootTableExt};
 use async_trait::async_trait;
@@ -62,6 +64,8 @@ pub struct LivingEntity {
     pub entity_equipment: Arc<Mutex<EntityEquipment>>,
     pub movement_input: AtomicCell<Vector3<f64>>,
     pub equipment_slots: Arc<HashMap<usize, EquipmentSlot>>,
+    /// The entity's attributes' base values (e.g. max health, movement speed, attack damage, ...)
+    pub attribute_manager: AttributeManager,
 
     pub movement_speed: AtomicCell<f64>,
 
@@ -91,7 +95,7 @@ impl LivingEntity {
     #[allow(dead_code)]
     const USING_RIPTIDE_FLAG: i32 = 4;
 
-    pub fn new(entity: Entity) -> Self {
+    pub fn new(entity: Entity, attribute_manager: AttributeManager) -> Self {
         let water_movement_speed_multiplier = if entity.entity_type == &EntityType::POLAR_BEAR {
             0.98
         } else if entity.entity_type == &EntityType::SKELETON_HORSE {
@@ -116,6 +120,7 @@ impl LivingEntity {
             active_effects: Mutex::new(HashMap::new()),
             entity_equipment: Arc::new(Mutex::new(EntityEquipment::new())),
             equipment_slots: Arc::new(build_equipment_slots()),
+            attribute_manager,
             jumping: AtomicBool::new(false),
             jumping_cooldown: AtomicU8::new(0),
             climbing: AtomicBool::new(false),
@@ -124,6 +129,32 @@ impl LivingEntity {
             movement_speed: AtomicCell::new(default_movement_speed),
             water_movement_speed_multiplier,
         }
+    }
+
+    /// construct an `AttributeManagerBuilder` that has default attributes for living entities already set
+    #[must_use]
+    pub fn living_entitiy_attribute_builder() -> AttributeManagerBuilder {
+        AttributeManagerBuilder::new()
+            .add_with_fallback_value(Attribute::MAX_HEALTH)
+            .add_with_fallback_value(Attribute::KNOCKBACK_RESISTANCE)
+            .add_with_fallback_value(Attribute::MOVEMENT_SPEED)
+            .add_with_fallback_value(Attribute::ARMOR)
+            .add_with_fallback_value(Attribute::ARMOR_TOUGHNESS)
+            .add_with_fallback_value(Attribute::MAX_ABSORPTION)
+            .add_with_fallback_value(Attribute::STEP_HEIGHT)
+            .add_with_fallback_value(Attribute::SCALE)
+            .add_with_fallback_value(Attribute::GRAVITY)
+            .add_with_fallback_value(Attribute::SAFE_FALL_DISTANCE)
+            .add_with_fallback_value(Attribute::FALL_DAMAGE_MULTIPLIER)
+            .add_with_fallback_value(Attribute::JUMP_STRENGTH)
+            .add_with_fallback_value(Attribute::OXYGEN_BONUS)
+            .add_with_fallback_value(Attribute::BURNING_TIME)
+            .add_with_fallback_value(Attribute::EXPLOSION_KNOCKBACK_RESISTANCE)
+            .add_with_fallback_value(Attribute::WATER_MOVEMENT_EFFICIENCY)
+            .add_with_fallback_value(Attribute::MOVEMENT_EFFICIENCY)
+            .add_with_fallback_value(Attribute::ATTACK_KNOCKBACK)
+            .add_with_fallback_value(Attribute::CAMERA_DISTANCE)
+            .add_with_fallback_value(Attribute::WAYPOINT_TRANSMIT_RANGE)
     }
 
     pub async fn send_equipment_changes(&self, equipment: &[(EquipmentSlot, ItemStack)]) {

@@ -40,9 +40,16 @@ impl CommandExecutor for GetExecutor {
     ) -> Result<(), CommandError> {
         let target = EntityArgumentConsumer::find_arg(args, ARG_TARGET)?;
 
-        let attribute = AttributeArgumentConsumer::find_arg(args, ARG_ATTRIBUTE)?;
+        let Some(target_as_living_entity) = target.get_living_entity() else {
+            return Err(CommandError::CommandFailed(Box::new(
+                TextComponent::translate("commands.attribute.failed.entity", [target.get_name()]),
+            )));
+        };
 
-        let scale = match args.get(ARG_SCALE) {
+        let (attribute_name, attribute) = AttributeArgumentConsumer::find_arg(args, ARG_ATTRIBUTE)?;
+
+        // todo: if /execute is ever fully implemented, this agrument becomes relevant
+        let _scale = match args.get(ARG_SCALE) {
             // default value
             None => Ok(1.0),
             // explicit value
@@ -55,12 +62,63 @@ impl CommandExecutor for GetExecutor {
             ))),
         }?;
 
-        // todo
-        let target_name = target.get_name().get_text();
-        let is_base = self.base_value_only;
-        sender.send_message(TextComponent::text(format!(
-            "GetExecutor: is_base: {is_base:?}, target: {target_name:?}, attribute: {attribute}, scale: {scale}"
-        ))).await;
+        if self.base_value_only {
+            let Ok(base_value) = target_as_living_entity
+                .attribute_manager
+                .get_base(attribute)
+            else {
+                return Err(CommandError::CommandFailed(Box::new(
+                    TextComponent::translate(
+                        "commands.attribute.failed.no_attribute",
+                        [
+                            target.get_name(),
+                            TextComponent::text(attribute_name.to_string()),
+                        ],
+                    ),
+                )));
+            };
+            sender
+                .send_message(TextComponent::translate(
+                    "commands.attribute.base_value.get.success",
+                    [
+                        TextComponent::text(attribute_name.to_string()),
+                        target.get_name(),
+                        TextComponent::text(base_value.to_string()),
+                    ],
+                ))
+                .await;
+        } else {
+            let Ok(value) = target_as_living_entity
+                .attribute_manager
+                .get_modified(
+                    attribute,
+                    &target_as_living_entity.entity_equipment,
+                    target.get_player().map(|p| p.inventory.held_item()),
+                    &target_as_living_entity.active_effects,
+                )
+                .await
+            else {
+                return Err(CommandError::CommandFailed(Box::new(
+                    TextComponent::translate(
+                        "commands.attribute.failed.no_attribute",
+                        [
+                            target.get_name(),
+                            TextComponent::text(attribute_name.to_string()),
+                        ],
+                    ),
+                )));
+            };
+            sender
+                .send_message(TextComponent::translate(
+                    "commands.attribute.value.get.success",
+                    [
+                        TextComponent::text(attribute_name.to_string()),
+                        target.get_name(),
+                        TextComponent::text(value.to_string()),
+                    ],
+                ))
+                .await;
+        }
 
         Ok(())
     }
@@ -77,14 +135,38 @@ impl CommandExecutor for ResetBaseValueExecutor {
         args: &ConsumedArgs<'a>,
     ) -> Result<(), CommandError> {
         let target = EntityArgumentConsumer::find_arg(args, ARG_TARGET)?;
-        let attribute = AttributeArgumentConsumer::find_arg(args, ARG_ATTRIBUTE)?;
 
-        // todo
-        let target_name = target.get_name().get_text();
+        let Some(target_as_living_entity) = target.get_living_entity() else {
+            return Err(CommandError::CommandFailed(Box::new(
+                TextComponent::translate("commands.attribute.failed.entity", [target.get_name()]),
+            )));
+        };
+
+        let (attribute_name, attribute) = AttributeArgumentConsumer::find_arg(args, ARG_ATTRIBUTE)?;
+
+        let Ok(value) = target_as_living_entity
+            .attribute_manager
+            .reset_base(attribute)
+        else {
+            return Err(CommandError::CommandFailed(Box::new(
+                TextComponent::translate(
+                    "commands.attribute.failed.no_attribute",
+                    [
+                        target.get_name(),
+                        TextComponent::text(attribute_name.to_string()),
+                    ],
+                ),
+            )));
+        };
         sender
-            .send_message(TextComponent::text(format!(
-                "ResetBaseValueExecutor: target: {target_name:?}, attribute: {attribute}"
-            )))
+            .send_message(TextComponent::translate(
+                "commands.attribute.base_value.reset.success",
+                [
+                    TextComponent::text(attribute_name.to_string()),
+                    target.get_name(),
+                    TextComponent::text(value.to_string()),
+                ],
+            ))
             .await;
 
         Ok(())
@@ -102,14 +184,42 @@ impl CommandExecutor for SetBaseValueExecutor {
         args: &ConsumedArgs<'a>,
     ) -> Result<(), CommandError> {
         let target = EntityArgumentConsumer::find_arg(args, ARG_TARGET)?;
-        let attribute = AttributeArgumentConsumer::find_arg(args, ARG_ATTRIBUTE)?;
+
+        let Some(target_as_living_entity) = target.get_living_entity() else {
+            return Err(CommandError::CommandFailed(Box::new(
+                TextComponent::translate("commands.attribute.failed.entity", [target.get_name()]),
+            )));
+        };
+
+        let (attribute_name, attribute) = AttributeArgumentConsumer::find_arg(args, ARG_ATTRIBUTE)?;
+
         let value = BoundedNumArgumentConsumer::<f64>::find_arg(args, ARG_VALUE)??;
 
-        // todo
-        let target_name = target.get_name().get_text();
-        sender.send_message(TextComponent::text(format!(
-            "SetBaseValueExecutor: target: {target_name:?}, attribute: {attribute}, value: {value}"
-        ))).await;
+        if target_as_living_entity
+            .attribute_manager
+            .set_base(attribute, value)
+            .is_err()
+        {
+            return Err(CommandError::CommandFailed(Box::new(
+                TextComponent::translate(
+                    "commands.attribute.failed.no_attribute",
+                    [
+                        target.get_name(),
+                        TextComponent::text(attribute_name.to_string()),
+                    ],
+                ),
+            )));
+        };
+        sender
+            .send_message(TextComponent::translate(
+                "commands.attribute.base_value.set.success",
+                [
+                    TextComponent::text(attribute_name.to_string()),
+                    target.get_name(),
+                    TextComponent::text(value.to_string()),
+                ],
+            ))
+            .await;
 
         Ok(())
     }
@@ -143,7 +253,7 @@ impl CommandExecutor for AddModifierExecutor {
         // todo
         let target_name = target.get_name().get_text();
         sender.send_message(TextComponent::text(format!(
-            "AddModifierExecutor: type: {operation:?}, target: {target_name:?}, attribute: {attribute}, value: {value}, id: {id}"
+            "AddModifierExecutor: type: {operation:?}, target: {target_name:?}, attribute: {attribute:?}, value: {value}, id: {id}"
         ))).await;
 
         Ok(())
@@ -170,7 +280,7 @@ impl CommandExecutor for RemoveModifierExecutor {
         let target_name = target.get_name().get_text();
         sender
             .send_message(TextComponent::text(format!(
-                "RemoveModifierExecutor: id: {id}, target: {target_name:?}, attribute: {attribute}"
+                "RemoveModifierExecutor: id: {id}, target: {target_name:?}, attribute: {attribute:?}"
             )))
             .await;
 
@@ -210,7 +320,7 @@ impl CommandExecutor for GetModifierExecutor {
         // todo
         let target_name = target.get_name().get_text();
         sender.send_message(TextComponent::text(format!(
-            "GetModifierExecutor: id: {id}, target: {target_name:?}, attribute: {attribute}, scale: {scale}"
+            "GetModifierExecutor: id: {id}, target: {target_name:?}, attribute: {attribute:?}, scale: {scale}"
         ))).await;
 
         Ok(())

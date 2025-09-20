@@ -3,6 +3,7 @@ use std::{collections::HashMap, hash::Hash, sync::Arc};
 use async_trait::async_trait;
 use bounded_num::{NotInBounds, Number};
 use pumpkin_data::Enchantment;
+use pumpkin_data::attributes::Attribute;
 use pumpkin_data::damage::DamageType;
 use pumpkin_data::effect::StatusEffect;
 use pumpkin_data::particle::Particle;
@@ -112,7 +113,7 @@ pub enum Arg<'a> {
     DamageType(DamageType),
     Effect(&'static StatusEffect),
     Enchantment(&'static Enchantment),
-    Attribute(String),
+    Attribute(String, Attribute),
 }
 
 /// see [`crate::commands::tree::builder::argument`] and [`CommandTree::execute`]/[`crate::commands::tree::builder::NonLeafNodeBuilder::execute`]

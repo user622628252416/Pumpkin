@@ -109,7 +109,7 @@ impl ToTokens for ItemComponents {
 
                 quote! {
                     Modifier {
-                        r#type: &Attributes::#r#type,
+                        r#type: &Attribute::#r#type,
                         id: #id,
                         amount: #amount,
                         operation: Operation::#operation,
@@ -488,7 +488,7 @@ pub(crate) fn build() -> TokenStream {
         use std::borrow::Cow;
         use std::hash::{Hash, Hasher};
         use crate::{tag, AttributeModifierSlot};
-        use crate::attributes::Attributes;
+        use crate::attributes::Attribute;
         use crate::data_component_impl::IDSet::{Blocks, Tag};
         use crate::data_component::DataComponent;
         use crate::Block;

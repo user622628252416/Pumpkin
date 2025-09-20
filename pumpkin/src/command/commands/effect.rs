@@ -289,7 +289,7 @@ pub fn init_command_tree() -> CommandTree {
                                     ARG_AMPLIFIER,
                                     BoundedNumArgumentConsumer::new()
                                         .name("amplifier")
-                                        .min(1)
+                                        .min(0)
                                         .max(255),
                                 )
                                 .execute(GiveExecutor(Time::Specified, Amplifier::Specified, true))
@@ -308,7 +308,7 @@ pub fn init_command_tree() -> CommandTree {
                                         ARG_AMPLIFIER,
                                         BoundedNumArgumentConsumer::new()
                                             .name("amplifier")
-                                            .min(1)
+                                            .min(0)
                                             .max(255),
                                     )
                                     .execute(GiveExecutor(

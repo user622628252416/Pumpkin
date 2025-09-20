@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 use async_trait::async_trait;
 use crossbeam::atomic::AtomicCell;
 use log::warn;
+use pumpkin_data::attributes::Attribute;
 use pumpkin_protocol::bedrock::client::level_chunk::CLevelChunk;
 use pumpkin_protocol::bedrock::client::set_time::CSetTime;
 use pumpkin_protocol::bedrock::client::update_abilities::{
@@ -24,7 +25,6 @@ use uuid::Uuid;
 
 use pumpkin_config::{BASIC_CONFIG, advanced_config};
 use pumpkin_data::damage::DamageType;
-use pumpkin_data::data_component_impl::{AttributeModifiersImpl, Operation};
 use pumpkin_data::data_component_impl::{EquipmentSlot, EquippableImpl};
 use pumpkin_data::effect::StatusEffect;
 use pumpkin_data::entity::{EntityPose, EntityStatus, EntityType};
@@ -78,6 +78,7 @@ use crate::block::blocks::bed::BedBlock;
 use crate::command::client_suggestions;
 use crate::command::dispatcher::CommandDispatcher;
 use crate::data::op_data::OPERATOR_CONFIG;
+use crate::entity::attribute_manager::AttributeNoteFoundError;
 use crate::net::{ClientPlatform, GameProfile};
 use crate::net::{DisconnectReason, PlayerConfig};
 use crate::plugin::player::player_change_world::PlayerChangeWorldEvent;
@@ -304,13 +305,32 @@ impl Player {
 
         let player_uuid = gameprofile.id;
 
-        let living_entity = LivingEntity::new(Entity::new(
-            player_uuid,
-            world,
-            Vector3::new(0.0, 100.0, 0.0),
-            &EntityType::PLAYER,
-            matches!(gamemode, GameMode::Creative | GameMode::Spectator),
-        ));
+        let attribute_manager = LivingEntity::living_entitiy_attribute_builder()
+            .add(Attribute::ATTACK_DAMAGE, 1.0)
+            .add(Attribute::MOVEMENT_SPEED, 0.1)
+            .add_with_fallback_value(Attribute::ATTACK_SPEED)
+            .add_with_fallback_value(Attribute::LUCK)
+            .add(Attribute::BLOCK_INTERACTION_RANGE, 4.5)
+            .add(Attribute::ENTITY_INTERACTION_RANGE, 3.0)
+            .add_with_fallback_value(Attribute::BLOCK_BREAK_SPEED)
+            .add_with_fallback_value(Attribute::SUBMERGED_MINING_SPEED)
+            .add_with_fallback_value(Attribute::SNEAKING_SPEED)
+            .add_with_fallback_value(Attribute::MINING_EFFICIENCY)
+            .add_with_fallback_value(Attribute::SWEEPING_DAMAGE_RATIO)
+            .add(Attribute::WAYPOINT_TRANSMIT_RANGE, 60_000_000.0)
+            .add(Attribute::WAYPOINT_RECEIVE_RANGE, 60_000_000.0)
+            .build();
+
+        let living_entity = LivingEntity::new(
+            Entity::new(
+                player_uuid,
+                world,
+                Vector3::new(0.0, 100.0, 0.0),
+                &EntityType::PLAYER,
+                matches!(gamemode, GameMode::Creative | GameMode::Spectator),
+            ),
+            attribute_manager,
+        );
 
         let inventory = Arc::new(PlayerInventory::new(
             living_entity.entity_equipment.clone(),
@@ -443,99 +463,114 @@ impl Player {
         //self.world().level.list_cached();
     }
 
+    /// utility for `self.living_entity.attribute_manager.get_modified(...)`
+    pub async fn get_attribute_value(
+        &self,
+        attr: Attribute,
+    ) -> Result<f64, AttributeNoteFoundError> {
+        self.living_entity
+            .attribute_manager
+            .get_modified(
+                attr,
+                &self.inventory.entity_equipment,
+                Some(self.inventory.held_item().clone()),
+                &self.living_entity.active_effects,
+            )
+            .await
+    }
+
     pub async fn attack(&self, victim: Arc<dyn EntityBase>) {
         let world = self.world();
         let victim_entity = victim.get_entity();
         let attacker_entity = &self.living_entity.entity;
         let config = &advanced_config().pvp;
 
-        let inventory = self.inventory();
-        let item_stack = inventory.held_item();
-
-        let base_damage = 1.0;
-        let base_attack_speed = 4.0;
-
-        let mut damage_multiplier = 1.0;
-        let mut add_damage = 0.0;
-        let mut add_speed = 0.0;
-
-        // Get the attack damage
-        // TODO: this should be cached in memory, we shouldn't just use default here either
-        if let Some(modifiers) = item_stack
-            .lock()
+        // todo: handle riptide damage (because in minecraft riptide damage is handled seperately from everything else appearantly)
+        let mut attack_damage = self
+            .get_attribute_value(Attribute::ATTACK_DAMAGE)
             .await
-            .get_data_component::<AttributeModifiersImpl>()
-        {
-            for item_mod in modifiers.attribute_modifiers.iter() {
-                if item_mod.operation == Operation::AddValue {
-                    if item_mod.id == "minecraft:base_attack_damage" {
-                        add_damage = item_mod.amount;
-                    } else if item_mod.id == "minecraft:base_attack_speed" {
-                        add_speed = item_mod.amount;
-                    }
-                }
-            }
-        }
+            .expect("all players should have ATTACK_DAMAGE attribute");
 
-        let attack_speed = base_attack_speed + add_speed;
+        let attack_speed = self
+            .get_attribute_value(Attribute::ATTACK_SPEED)
+            .await
+            .expect("all players should have ATTACK_SPEED attribute");
+
+        // todo: implement extra damage certain enchantments add depending on attack_victim, such as smite when attacking zombies
+        // should be something like:
+        // let mut enchantment_extra_damage = get_attack_damage_when_attacking_specific_entity(vitim_entity) - attack_damage;
+        // where get_attack_damage_when_attacking_specific_entity applies enchantment effects based on victim_entity's entity type
+        let mut enchantment_extra_damage = 0.0;
 
         let attack_cooldown_progress = self.get_attack_cooldown_progress(0.5, attack_speed);
         self.last_attacked_ticks.store(0, Ordering::Relaxed);
 
-        // Only reduce attack damage if in cooldown
-        // TODO: Enchantments are reduced in the same way, just without the square.
-        if attack_cooldown_progress < 1.0 {
-            damage_multiplier = 0.2 + attack_cooldown_progress.powi(2) * 0.8;
-        }
-        // Modify the added damage based on the multiplier.
-        let mut damage = base_damage + add_damage * damage_multiplier;
+        // 80% of attack damage is quadratically affected by cooldown progress
+        attack_damage *= 0.2 + 0.8 * attack_cooldown_progress * attack_cooldown_progress;
+        // enchantment extra damage is affected linearly by attack cooldown
+        enchantment_extra_damage *= attack_cooldown_progress;
 
-        let pos = victim_entity.pos.load();
+        // todo: check if victim entity is redirectable projectile and if it is, deflect it instead of continuing with attack logic here
 
-        let attack_type = AttackType::new(self, attack_cooldown_progress as f32).await;
+        if attack_damage > 0.0 || enchantment_extra_damage > 0.0 {
+            // todo: add mace bonus damage
+            // should be something like:
+            // attack_damage += item_stack.get_bonus_attack_damage(self, victim_entity, ...)
 
-        if matches!(attack_type, AttackType::Critical) {
-            damage *= 1.5;
-        }
+            let attack_type = AttackType::new(self, attack_cooldown_progress as f32).await;
 
-        if !victim
-            .damage_with_context(
-                victim.clone(),
-                damage as f32,
-                DamageType::PLAYER_ATTACK,
-                None,
-                Some(&self.living_entity.entity),
-                Some(&self.living_entity.entity),
-            )
-            .await
-        {
-            world
-                .play_sound(
-                    Sound::EntityPlayerAttackNodamage,
-                    SoundCategory::Players,
-                    &self.living_entity.entity.pos.load(),
+            if matches!(attack_type, AttackType::Critical) {
+                attack_damage *= 1.5;
+            }
+
+            let total_damage = attack_damage + enchantment_extra_damage;
+
+            let pos = victim_entity.pos.load();
+
+            if !victim
+                .damage_with_context(
+                    victim.clone(),
+                    total_damage as f32,
+                    DamageType::PLAYER_ATTACK,
+                    None,
+                    Some(&self.living_entity.entity),
+                    Some(&self.living_entity.entity),
                 )
-                .await;
-            return;
-        }
-
-        if victim.get_living_entity().is_some() {
-            let mut knockback_strength = 1.0;
-            player_attack_sound(&pos, world, attack_type).await;
-            match attack_type {
-                AttackType::Knockback => knockback_strength += 1.0,
-                AttackType::Sweeping => {
-                    combat::spawn_sweep_particle(attacker_entity, world, &pos).await;
-                }
-                _ => {}
-            }
-            if config.knockback {
-                combat::handle_knockback(attacker_entity, world, victim_entity, knockback_strength)
+                .await
+            {
+                world
+                    .play_sound(
+                        Sound::EntityPlayerAttackNodamage,
+                        SoundCategory::Players,
+                        &self.living_entity.entity.pos.load(),
+                    )
                     .await;
+                return;
             }
-        }
 
-        if config.swing {}
+            if victim.get_living_entity().is_some() {
+                let mut knockback_strength = 1.0;
+                player_attack_sound(&pos, world, attack_type).await;
+                match attack_type {
+                    AttackType::Knockback => knockback_strength += 1.0,
+                    AttackType::Sweeping => {
+                        combat::spawn_sweep_particle(attacker_entity, world, &pos).await;
+                    }
+                    _ => {}
+                }
+                if config.knockback {
+                    combat::handle_knockback(
+                        attacker_entity,
+                        world,
+                        victim_entity,
+                        knockback_strength,
+                    )
+                    .await;
+                }
+            }
+
+            if config.swing {}
+        }
     }
 
     pub async fn set_respawn_point(

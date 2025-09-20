@@ -1,10 +1,12 @@
 use super::{Entity, EntityBase, NBTStorage, ai::path::Navigator, living::LivingEntity};
 use crate::entity::ai::control::look_control::LookControl;
 use crate::entity::ai::goal::goal_selector::GoalSelector;
+use crate::entity::attribute_manager::{AttributeManager, AttributeManagerBuilder};
 use crate::server::Server;
 use crate::world::World;
 use async_trait::async_trait;
 use crossbeam::atomic::AtomicCell;
+use pumpkin_data::attributes::Attribute;
 use pumpkin_data::damage::DamageType;
 use pumpkin_util::math::position::BlockPos;
 use pumpkin_util::math::vector3::Vector3;
@@ -28,9 +30,9 @@ pub struct MobEntity {
 
 impl MobEntity {
     #[must_use]
-    pub fn new(entity: Entity) -> Self {
+    pub fn new(entity: Entity, attribute_manager: AttributeManager) -> Self {
         Self {
-            living_entity: LivingEntity::new(entity),
+            living_entity: LivingEntity::new(entity, attribute_manager),
             goals_selector: GoalSelector::default(),
             target_selector: GoalSelector::default(),
             navigator: Mutex::new(Navigator::default()),
@@ -40,6 +42,17 @@ impl MobEntity {
             position_target_range: AtomicI32::new(-1),
         }
     }
+
+    #[must_use]
+    pub fn mob_entity_attribute_builder() -> AttributeManagerBuilder {
+        LivingEntity::living_entitiy_attribute_builder().add(Attribute::FOLLOW_RANGE, 16.0)
+    }
+
+    #[must_use]
+    pub fn hostile_mob_entity_attribute_builder() -> AttributeManagerBuilder {
+        Self::mob_entity_attribute_builder().add_with_fallback_value(Attribute::ATTACK_DAMAGE)
+    }
+
     pub fn is_in_position_target_range(&self) -> bool {
         self.is_in_position_target_range_pos(self.living_entity.entity.block_pos.load())
     }

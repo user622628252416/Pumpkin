@@ -39,7 +39,7 @@ impl Modifiers {
         let operation = format_ident!("{}", self.operation.to_pascal_case());
         quote! {
             Modifiers {
-                attribute: &Attributes::#attribute,
+                attribute: &Attribute::#attribute,
                 id: #id,
                 base_value: #base_value,
                 operation: Operation::#operation,
@@ -97,7 +97,7 @@ pub(crate) fn build() -> TokenStream {
 
     quote! {
         use std::hash::{Hash, Hasher};
-        use crate::attributes::Attributes;
+        use crate::attributes::Attribute;
         use crate::data_component_impl::Operation;
 
         #[derive(Debug)]
@@ -133,7 +133,7 @@ pub(crate) fn build() -> TokenStream {
 
         #[derive(Debug)]
         pub struct Modifiers {
-            pub attribute: &'static Attributes,
+            pub attribute: &'static Attribute,
             pub id: &'static str,
             pub base_value: f64,
             pub operation: Operation,
