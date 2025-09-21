@@ -543,6 +543,16 @@ impl Server {
         None
     }
 
+    pub async fn get_entity_by_uuid(&self, id: &uuid::Uuid) -> Option<Arc<dyn EntityBase>> {
+        for world in self.worlds.read().await.iter() {
+            let entities = world.entities.read().await;
+            if let Some(entity) = entities.get(id) {
+                return Some(entity.clone());
+            }
+        }
+        None
+    }
+
     /// Counts the total number of players across all worlds.
     ///
     /// This function iterates through each world and sums up the number of players currently connected to that world.
@@ -738,6 +748,8 @@ impl Server {
             EntitySelectorType::Uuid(uuid) => {
                 if let Some(player) = self.get_player_by_uuid(*uuid).await {
                     vec![player as Arc<dyn EntityBase>].into_iter()
+                } else if let Some(entity) = self.get_entity_by_uuid(uuid).await {
+                    vec![entity].into_iter()
                 } else {
                     vec![].into_iter()
                 }

@@ -78,7 +78,7 @@ use crate::block::blocks::bed::BedBlock;
 use crate::command::client_suggestions;
 use crate::command::dispatcher::CommandDispatcher;
 use crate::data::op_data::OPERATOR_CONFIG;
-use crate::entity::attribute_manager::AttributeNoteFoundError;
+use crate::entity::attribute_manager::AttributeError;
 use crate::net::{ClientPlatform, GameProfile};
 use crate::net::{DisconnectReason, PlayerConfig};
 use crate::plugin::player::player_change_world::PlayerChangeWorldEvent;
@@ -464,18 +464,10 @@ impl Player {
     }
 
     /// utility for `self.living_entity.attribute_manager.get_modified(...)`
-    pub async fn get_attribute_value(
-        &self,
-        attr: Attribute,
-    ) -> Result<f64, AttributeNoteFoundError> {
+    pub async fn get_attribute_value(&self, attr: Attribute) -> Result<f64, AttributeError> {
         self.living_entity
             .attribute_manager
-            .get_modified(
-                attr,
-                &self.inventory.entity_equipment,
-                Some(self.inventory.held_item().clone()),
-                &self.living_entity.active_effects,
-            )
+            .get_modified(attr)
             .await
     }
 
@@ -1664,43 +1656,9 @@ impl Player {
         self.set_experience(new_level, progress, points).await;
     }
 
-    pub async fn add_effect(&self, effect: Effect) {
-        self.send_effect(effect.clone()).await;
-        self.living_entity.add_effect(effect).await;
-    }
-
-    pub async fn send_active_effects(&self) {
-        let effects = self.living_entity.active_effects.lock().await;
-        for effect in effects.values() {
-            self.send_effect(effect.clone()).await;
-        }
-    }
-
-    pub async fn send_effect(&self, effect: Effect) {
-        let mut flag: i8 = 0;
-
-        if effect.ambient {
-            flag |= 1;
-        }
-        if effect.show_particles {
-            flag |= 2;
-        }
-        if effect.show_icon {
-            flag |= 4;
-        }
-        if effect.blend {
-            flag |= 8;
-        }
-
-        let effect_id = VarInt(i32::from(effect.effect_type.id));
+    pub async fn send_effect(&self, effect: &Effect) {
         self.client
-            .enqueue_packet(&CUpdateMobEffect::new(
-                self.entity_id().into(),
-                effect_id,
-                effect.amplifier.into(),
-                effect.duration.into(),
-                flag,
-            ))
+            .enqueue_packet(&CUpdateMobEffect::new(self.entity_id(), effect))
             .await;
     }
 
@@ -1717,30 +1675,6 @@ impl Player {
         self.living_entity.remove_effect(effect_type).await;
 
         // TODO broadcast metadata
-    }
-
-    pub async fn remove_all_effect(&self) -> u8 {
-        let mut count = 0;
-        let mut effect_list = vec![];
-        for effect in self.living_entity.active_effects.lock().await.keys() {
-            effect_list.push(*effect);
-            let effect_id = VarInt(i32::from(effect.id));
-            self.client
-                .enqueue_packet(
-                    &pumpkin_protocol::java::client::play::CRemoveMobEffect::new(
-                        self.entity_id().into(),
-                        effect_id,
-                    ),
-                )
-                .await;
-            count += 1;
-        }
-        //Need to remove effect after because the player effect are lock in the for before
-        for effect in effect_list {
-            self.living_entity.remove_effect(effect).await;
-        }
-
-        count
     }
 
     /// Add experience levels to the player.

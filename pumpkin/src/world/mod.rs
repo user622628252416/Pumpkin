@@ -41,6 +41,7 @@ use pumpkin_config::BasicConfiguration;
 use pumpkin_data::data_component_impl::EquipmentSlot;
 use pumpkin_data::entity::MobCategory;
 use pumpkin_data::fluid::{Falling, FluidProperties, FluidState};
+use pumpkin_data::potion::Effect;
 use pumpkin_data::{
     Block,
     entity::{EntityStatus, EntityType},
@@ -56,6 +57,7 @@ use pumpkin_nbt::{compound::NbtCompound, to_bytes_unnamed};
 use pumpkin_protocol::bedrock::client::chunk_radius_update::CChunkRadiusUpdate;
 use pumpkin_protocol::bedrock::client::network_chunk_publisher_update::CNetworkChunkPublisherUpdate;
 use pumpkin_protocol::bedrock::frame_set::FrameSet;
+use pumpkin_protocol::java::client::play::CUpdateMobEffect;
 use pumpkin_protocol::{
     BClientPacket, ClientPacket, IdOr, SoundEvent,
     bedrock::{
@@ -308,11 +310,19 @@ impl World {
         effect_type: &'static StatusEffect,
     ) {
         // TODO: only nearby
+        // TODO: also send to bedrock clients
         self.broadcast_packet_all(&CRemoveMobEffect::new(
             entity.entity_id.into(),
             VarInt(i32::from(effect_type.id)),
         ))
         .await;
+    }
+
+    pub async fn send_add_mob_effect(&self, entity: &Entity, effect: &Effect) {
+        // TODO: only nearby
+        // TODO: also send to bedrock clients
+        self.broadcast_packet_all(&CUpdateMobEffect::new(entity.entity_id.into(), effect))
+            .await;
     }
 
     pub async fn set_difficulty(&self, difficulty: Difficulty) {
@@ -1688,7 +1698,7 @@ impl World {
             .on_screen_handler_opened(player.player_screen_handler.clone())
             .await;
 
-        player.send_active_effects().await;
+        player.living_entity.send_active_effects_to(&player).await;
         self.send_player_equipment(&player).await;
     }
 

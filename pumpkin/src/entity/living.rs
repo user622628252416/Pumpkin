@@ -15,6 +15,7 @@ use std::{collections::HashMap, sync::atomic::AtomicI32};
 use super::{Entity, NBTStorage};
 use super::{EntityBase, NBTStorageInit};
 use crate::entity::attribute_manager::{AttributeManager, AttributeManagerBuilder};
+use crate::entity::player::Player;
 use crate::server::Server;
 use crate::world::loot::{LootContextParameters, LootTableExt};
 use async_trait::async_trait;
@@ -60,7 +61,8 @@ pub struct LivingEntity {
     pub dead: AtomicBool,
     /// The distance the entity has been falling.
     pub fall_distance: AtomicCell<f32>,
-    pub active_effects: Mutex<HashMap<&'static StatusEffect, Effect>>,
+    /// use methods for adding/removing/checking effects, changes need to be broadcast
+    active_effects: Mutex<HashMap<&'static StatusEffect, Effect>>,
     pub entity_equipment: Arc<Mutex<EntityEquipment>>,
     pub movement_input: AtomicCell<Vector3<f64>>,
     pub equipment_slots: Arc<HashMap<usize, EquipmentSlot>>,
@@ -238,20 +240,61 @@ impl LivingEntity {
         self.entity.entity_id
     }
 
-    pub async fn add_effect(&self, effect: Effect) {
-        self.active_effects
-            .lock()
-            .await
-            .insert(effect.effect_type, effect);
-        // TODO broadcast metadata
+    pub async fn add_effect(&self, effect: &Effect) {
+        {
+            self.active_effects
+                .lock()
+                .await
+                .insert(effect.effect_type, effect.clone());
+        }
+
+        self.entity
+            .world
+            .send_add_mob_effect(&self.entity, &effect)
+            .await;
+
+        self.attribute_manager
+            .notify_status_effects_changed(&self.entity, &self.active_effects)
+            .await;
     }
 
-    pub async fn remove_effect(&self, effect_type: &'static StatusEffect) {
-        self.active_effects.lock().await.remove(&effect_type);
+    /// returns true if effect was successfully removed, false if entity didn't have this effect
+    pub async fn remove_effect(&self, effect_type: &'static StatusEffect) -> bool {
+        let success = {
+            self.active_effects
+                .lock()
+                .await
+                .remove(&effect_type)
+                .is_some()
+        };
+
         self.entity
             .world
             .send_remove_mob_effect(&self.entity, effect_type)
             .await;
+
+        self.attribute_manager
+            .notify_status_effects_changed(&self.entity, &self.active_effects)
+            .await;
+
+        success
+    }
+
+    pub async fn send_active_effects_to(&self, target_player: &Player) {
+        let effects = self.active_effects.lock().await;
+        for effect in effects.values() {
+            target_player.send_effect(effect).await;
+        }
+    }
+
+    pub async fn remove_all_effects(&self) -> usize {
+        let effect_list: Vec<_> = { self.active_effects.lock().await.keys().copied().collect() };
+
+        for effect in &effect_list {
+            self.remove_effect(effect).await;
+        }
+
+        effect_list.len()
     }
 
     pub async fn has_effect(&self, effect: &'static StatusEffect) -> bool {
@@ -993,6 +1036,10 @@ impl NBTStorage for LivingEntity {
                 }
             }
         }
+        // todo: attribute base values
+        self.attribute_manager
+            .notify_status_effects_changed(&self.entity, &self.active_effects)
+            .await;
         // todo more...
     }
 }

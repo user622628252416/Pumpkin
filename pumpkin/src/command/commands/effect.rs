@@ -1,15 +1,14 @@
 use crate::TextComponent;
 use crate::command::args::bool::BoolArgConsumer;
 use crate::command::args::bounded_num::BoundedNumArgumentConsumer;
-use crate::command::args::players::PlayersArgumentConsumer;
+use crate::command::args::entities::EntitiesArgumentConsumer;
 use crate::command::args::resource::effect::EffectTypeArgumentConsumer;
-use crate::command::args::{Arg, ConsumedArgs, FindArgDefaultName};
+use crate::command::args::{Arg, ConsumedArgs, FindArg, FindArgDefaultName};
 use crate::command::dispatcher::CommandError;
 use crate::command::dispatcher::CommandError::InvalidConsumption;
 use crate::command::tree::CommandTree;
 use crate::command::tree::builder::{argument, literal};
 use crate::command::{CommandExecutor, CommandSender};
-use crate::entity::EntityBase;
 use crate::server::Server;
 use async_trait::async_trait;
 use pumpkin_data::potion::Effect;
@@ -22,7 +21,7 @@ const DESCRIPTION: &str = "Adds or removes the status effects of players and oth
 const ARG_CLEAR: &str = "clear";
 const ARG_GIVE: &str = "give";
 const ARG_EFFECT: &str = "effect";
-const ARG_TARGET: &str = "target";
+const ARG_TARGETS: &str = "targets";
 const ARG_SECOND: &str = "seconds";
 const ARG_INFINITE: &str = "infinite";
 const ARG_AMPLIFIER: &str = "amplifier";
@@ -49,9 +48,8 @@ impl CommandExecutor for GiveExecutor {
         _server: &Server,
         args: &ConsumedArgs<'a>,
     ) -> Result<(), CommandError> {
-        let Some(Arg::Players(targets)) = args.get(ARG_TARGET) else {
-            return Err(InvalidConsumption(Some(ARG_TARGET.into())));
-        };
+        let targets = EntitiesArgumentConsumer::find_arg(args, ARG_TARGETS)?;
+
         let Some(Arg::Effect(effect)) = args.get(ARG_EFFECT) else {
             return Err(InvalidConsumption(Some(ARG_EFFECT.into())));
         };
@@ -92,19 +90,20 @@ impl CommandExecutor for GiveExecutor {
         let mut failed = 0;
 
         for target in targets {
-            if target.living_entity.has_effect(effect).await
-                && target
-                    .living_entity
-                    .get_effect(effect)
-                    .await
-                    .unwrap()
-                    .amplifier
-                    > amplifier as u8
+            let Some(living_target) = target.get_living_entity() else {
+                continue;
+            };
+
+            let current_effect_of_target = living_target.get_effect(effect).await;
+
+            if current_effect_of_target
+                .map(|e| e.amplifier as i32 >= amplifier)
+                .unwrap_or(false)
             {
                 failed += 1;
             } else {
-                target
-                    .add_effect(Effect {
+                living_target
+                    .add_effect(&Effect {
                         effect_type: effect,
                         duration: second,
                         amplifier: amplifier as u8,
@@ -149,7 +148,10 @@ impl CommandExecutor for GiveExecutor {
     }
 }
 
-struct ClearExecutor(bool); //the param -> true = delete every effect, false = only one
+struct ClearExecutor {
+    /// true = delete every effect, false = only one
+    clear_all: bool,
+}
 
 #[async_trait]
 impl CommandExecutor for ClearExecutor {
@@ -159,16 +161,16 @@ impl CommandExecutor for ClearExecutor {
         _server: &Server,
         args: &ConsumedArgs<'a>,
     ) -> Result<(), CommandError> {
-        let Some(Arg::Players(targets)) = args.get(ARG_TARGET) else {
-            return Err(InvalidConsumption(Some(ARG_TARGET.into())));
-        };
+        let targets = EntitiesArgumentConsumer::find_arg(args, ARG_TARGETS)?;
 
         let effect;
-        //Only one effect
-        if self.0 {
+        if self.clear_all {
             let mut effect_number = 0;
             for target in targets {
-                let effect_number_temp = target.remove_all_effect().await;
+                let Some(living_target) = target.get_living_entity() else {
+                    continue;
+                };
+                let effect_number_temp = living_target.remove_all_effects().await;
                 if effect_number_temp > effect_number {
                     effect_number = effect_number_temp;
                 }
@@ -208,10 +210,10 @@ impl CommandExecutor for ClearExecutor {
             let mut has_effect = vec![];
 
             for target in targets {
-                if !target.living_entity.has_effect(effect).await {
-                    target.remove_effect(effect).await;
-                }
-                has_effect.push(target.living_entity.has_effect(effect).await);
+                has_effect.push(match target.get_living_entity() {
+                    None => false,
+                    Some(living_entity) => living_entity.remove_effect(effect_type).await,
+                });
             }
 
             if has_effect.contains(&false) {
@@ -261,17 +263,17 @@ pub fn init_command_tree() -> CommandTree {
     CommandTree::new(NAMES, DESCRIPTION)
         .then(
             literal(ARG_CLEAR).then(
-                argument(ARG_TARGET, PlayersArgumentConsumer)
-                    .execute(ClearExecutor(true))
+                argument(ARG_TARGETS, EntitiesArgumentConsumer)
+                    .execute(ClearExecutor { clear_all: true })
                     .then(
                         argument(ARG_EFFECT, EffectTypeArgumentConsumer)
-                            .execute(ClearExecutor(false)),
+                            .execute(ClearExecutor { clear_all: false }),
                     ),
             ),
         )
         .then(
             literal(ARG_GIVE).then(
-                argument(ARG_TARGET, PlayersArgumentConsumer).then(
+                argument(ARG_TARGETS, EntitiesArgumentConsumer).then(
                     argument(ARG_EFFECT, EffectTypeArgumentConsumer)
                         .execute(GiveExecutor(Time::Base, Amplifier::Base, true))
                         //for specified time

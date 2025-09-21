@@ -1,21 +1,24 @@
 use async_trait::async_trait;
-use pumpkin_protocol::java::client::play::{CUpdateAttributes, CUpdateAttributesEntry};
+use pumpkin_data::data_component_impl::Operation;
 use pumpkin_util::text::TextComponent;
 
-use crate::command::{
-    CommandExecutor, CommandSender,
-    args::{
-        Arg, ConsumedArgs, FindArg,
-        bounded_num::{BoundedNumArgumentConsumer, Number},
-        entity::EntityArgumentConsumer,
-        resource::attribute::AttributeArgumentConsumer,
-        resource_location::ResourceLocationArgumentConsumer,
+use crate::{
+    command::{
+        CommandExecutor, CommandSender,
+        args::{
+            Arg, ConsumedArgs, FindArg,
+            bounded_num::{BoundedNumArgumentConsumer, Number},
+            entity::EntityArgumentConsumer,
+            resource::attribute::AttributeArgumentConsumer,
+            resource_location::ResourceLocationArgumentConsumer,
+        },
+        dispatcher::CommandError,
+        tree::{
+            CommandTree,
+            builder::{argument, literal},
+        },
     },
-    dispatcher::CommandError,
-    tree::{
-        CommandTree,
-        builder::{argument, literal},
-    },
+    entity::attribute_manager::AttributeError,
 };
 
 const NAMES: [&str; 1] = ["attribute"];
@@ -91,12 +94,7 @@ impl CommandExecutor for GetExecutor {
         } else {
             let Ok(value) = target_as_living_entity
                 .attribute_manager
-                .get_modified(
-                    attribute,
-                    &target_as_living_entity.entity_equipment,
-                    target.get_player().map(|p| p.inventory.held_item()),
-                    &target_as_living_entity.active_effects,
-                )
+                .get_modified(attribute)
                 .await
             else {
                 return Err(CommandError::CommandFailed(Box::new(
@@ -147,7 +145,8 @@ impl CommandExecutor for ResetBaseValueExecutor {
 
         let Ok(value) = target_as_living_entity
             .attribute_manager
-            .reset_base(attribute)
+            .reset_base(&target_as_living_entity.entity, attribute)
+            .await
         else {
             return Err(CommandError::CommandFailed(Box::new(
                 TextComponent::translate(
@@ -181,7 +180,7 @@ impl CommandExecutor for SetBaseValueExecutor {
     async fn execute<'a>(
         &self,
         sender: &mut CommandSender,
-        server: &crate::server::Server,
+        _server: &crate::server::Server,
         args: &ConsumedArgs<'a>,
     ) -> Result<(), CommandError> {
         let target = EntityArgumentConsumer::find_arg(args, ARG_TARGET)?;
@@ -198,7 +197,8 @@ impl CommandExecutor for SetBaseValueExecutor {
 
         if target_as_living_entity
             .attribute_manager
-            .set_base(attribute, value)
+            .set_base(&target_as_living_entity.entity, attribute, value)
+            .await
             .is_err()
         {
             return Err(CommandError::CommandFailed(Box::new(
@@ -222,32 +222,11 @@ impl CommandExecutor for SetBaseValueExecutor {
             ))
             .await;
 
-        // todo: actually track attributes and stuff
-        server
-            .broadcast_packet_all(&CUpdateAttributes::new(
-                target.get_entity().entity_id,
-                vec![CUpdateAttributesEntry::new(
-                    attribute,
-                    value,
-                    vec![/* todo: modifiers */],
-                )],
-            ))
-            .await;
-
         Ok(())
     }
 }
 
-/// How an attribute modifier modifies the attributes base value
-#[derive(Debug, Copy, Clone)]
-#[allow(clippy::enum_variant_names)]
-enum ModifierOperation {
-    AddValue,
-    AddMultipliedBase,
-    AddMultipliedTotal,
-}
-
-struct AddModifierExecutor(ModifierOperation);
+struct AddModifierExecutor(Operation);
 
 #[async_trait]
 impl CommandExecutor for AddModifierExecutor {
@@ -258,16 +237,66 @@ impl CommandExecutor for AddModifierExecutor {
         args: &ConsumedArgs<'a>,
     ) -> Result<(), CommandError> {
         let target = EntityArgumentConsumer::find_arg(args, ARG_TARGET)?;
-        let attribute = AttributeArgumentConsumer::find_arg(args, ARG_ATTRIBUTE)?;
+
+        let Some(target_as_living_entity) = target.get_living_entity() else {
+            return Err(CommandError::CommandFailed(Box::new(
+                TextComponent::translate("commands.attribute.failed.entity", [target.get_name()]),
+            )));
+        };
+
+        let (attribute_name, attribute) = AttributeArgumentConsumer::find_arg(args, ARG_ATTRIBUTE)?;
         let value = BoundedNumArgumentConsumer::<f64>::find_arg(args, ARG_VALUE)??;
         let id = ResourceLocationArgumentConsumer::find_arg(args, ARG_ID)?;
-        let operation = self.0;
+        let op = self.0;
 
-        // todo
-        let target_name = target.get_name().get_text();
-        sender.send_message(TextComponent::text(format!(
-            "AddModifierExecutor: type: {operation:?}, target: {target_name:?}, attribute: {attribute:?}, value: {value}, id: {id}"
-        ))).await;
+        match target_as_living_entity
+            .attribute_manager
+            .add_modifier(
+                &target_as_living_entity.entity,
+                attribute,
+                id.to_owned(),
+                value,
+                op,
+            )
+            .await
+        {
+            Ok(()) => {
+                sender
+                    .send_message(TextComponent::translate(
+                        "commands.attribute.modifier.add.success",
+                        [
+                            TextComponent::text(id.to_owned()),
+                            TextComponent::text(attribute_name.to_owned()),
+                            target.get_name(),
+                        ],
+                    ))
+                    .await;
+            }
+            Err(AttributeError::AttributeNotFound) => {
+                return Err(CommandError::CommandFailed(Box::new(
+                    TextComponent::translate(
+                        "commands.attribute.failed.no_attribute",
+                        [
+                            target.get_name(),
+                            TextComponent::text(attribute_name.to_owned()),
+                        ],
+                    ),
+                )));
+            }
+            Err(AttributeError::ModifierAlreadyExists(attr)) => {
+                return Err(CommandError::CommandFailed(Box::new(
+                    TextComponent::translate(
+                        "commands.attribute.failed.modifier_already_present",
+                        [
+                            TextComponent::text(id.to_owned()),
+                            TextComponent::text(format!("{:?}", attr)),
+                            target.get_name(),
+                        ],
+                    ),
+                )));
+            }
+            Err(AttributeError::ModifierDoesNotExist) => unreachable!(),
+        }
 
         Ok(())
     }
@@ -285,17 +314,58 @@ impl CommandExecutor for RemoveModifierExecutor {
     ) -> Result<(), CommandError> {
         let target = EntityArgumentConsumer::find_arg(args, ARG_TARGET)?;
 
-        let attribute = AttributeArgumentConsumer::find_arg(args, ARG_ATTRIBUTE)?;
+        let Some(target_as_living_entity) = target.get_living_entity() else {
+            return Err(CommandError::CommandFailed(Box::new(
+                TextComponent::translate("commands.attribute.failed.entity", [target.get_name()]),
+            )));
+        };
+
+        let (attribute_name, attribute) = AttributeArgumentConsumer::find_arg(args, ARG_ATTRIBUTE)?;
 
         let id = ResourceLocationArgumentConsumer::find_arg(args, ARG_ID)?;
 
-        // todo
-        let target_name = target.get_name().get_text();
-        sender
-            .send_message(TextComponent::text(format!(
-                "RemoveModifierExecutor: id: {id}, target: {target_name:?}, attribute: {attribute:?}"
-            )))
-            .await;
+        match target_as_living_entity
+            .attribute_manager
+            .remove_modifier(&target_as_living_entity.entity, attribute, id)
+            .await
+        {
+            Ok(()) => {
+                sender
+                    .send_message(TextComponent::translate(
+                        "commands.attribute.modifier.remove.success",
+                        [
+                            TextComponent::text(id.to_owned()),
+                            TextComponent::text(attribute_name.to_owned()),
+                            target.get_name(),
+                        ],
+                    ))
+                    .await;
+            }
+            Err(AttributeError::AttributeNotFound) => {
+                return Err(CommandError::CommandFailed(Box::new(
+                    TextComponent::translate(
+                        "commands.attribute.failed.no_attribute",
+                        [
+                            target.get_name(),
+                            TextComponent::text(attribute_name.to_owned()),
+                        ],
+                    ),
+                )));
+            }
+            Err(AttributeError::ModifierDoesNotExist) => {
+                return Err(CommandError::CommandFailed(Box::new(
+                    TextComponent::translate(
+                        "commands.attribute.failed.no_modifier",
+                        [
+                            TextComponent::text(attribute_name.to_owned()),
+                            target.get_name(),
+                            TextComponent::text(id.to_owned()),
+                        ],
+                    ),
+                )));
+            }
+            Err(AttributeError::ModifierAlreadyExists(_)) => unreachable!(),
+        };
 
         Ok(())
     }
@@ -313,9 +383,17 @@ impl CommandExecutor for GetModifierExecutor {
     ) -> Result<(), CommandError> {
         let target = EntityArgumentConsumer::find_arg(args, ARG_TARGET)?;
 
-        let attribute = AttributeArgumentConsumer::find_arg(args, ARG_ATTRIBUTE)?;
+        let Some(target_as_living_entity) = target.get_living_entity() else {
+            return Err(CommandError::CommandFailed(Box::new(
+                TextComponent::translate("commands.attribute.failed.entity", [target.get_name()]),
+            )));
+        };
 
-        let scale = match args.get(ARG_SCALE) {
+        let (attribute_name, _attribute) =
+            AttributeArgumentConsumer::find_arg(args, ARG_ATTRIBUTE)?;
+
+        // todo: if /execute is ever fully implemented, this agrument becomes relevant
+        let _scale = match args.get(ARG_SCALE) {
             // default value
             None => Ok(1.0),
             // explicit value
@@ -330,11 +408,49 @@ impl CommandExecutor for GetModifierExecutor {
 
         let id = ResourceLocationArgumentConsumer::find_arg(args, ARG_ID)?;
 
-        // todo
-        let target_name = target.get_name().get_text();
-        sender.send_message(TextComponent::text(format!(
-            "GetModifierExecutor: id: {id}, target: {target_name:?}, attribute: {attribute:?}, scale: {scale}"
-        ))).await;
+        match target_as_living_entity
+            .attribute_manager
+            .get_modifier_value(id)
+            .await
+        {
+            Ok(value) => {
+                sender
+                    .send_message(TextComponent::translate(
+                        "commands.attribute.modifier.value.get.success",
+                        [
+                            TextComponent::text(id.to_owned()),
+                            TextComponent::text(attribute_name.to_owned()),
+                            target.get_name(),
+                            TextComponent::text(value.to_string()),
+                        ],
+                    ))
+                    .await;
+            }
+            Err(AttributeError::AttributeNotFound) => {
+                return Err(CommandError::CommandFailed(Box::new(
+                    TextComponent::translate(
+                        "commands.attribute.failed.no_attribute",
+                        [
+                            target.get_name(),
+                            TextComponent::text(attribute_name.to_owned()),
+                        ],
+                    ),
+                )));
+            }
+            Err(AttributeError::ModifierDoesNotExist) => {
+                return Err(CommandError::CommandFailed(Box::new(
+                    TextComponent::translate(
+                        "commands.attribute.failed.no_modifier",
+                        [
+                            TextComponent::text(attribute_name.to_owned()),
+                            target.get_name(),
+                            TextComponent::text(id.to_owned()),
+                        ],
+                    ),
+                )));
+            }
+            Err(AttributeError::ModifierAlreadyExists(_)) => unreachable!(),
+        };
 
         Ok(())
     }
@@ -386,18 +502,15 @@ pub fn init_command_tree() -> CommandTree {
                             literal("add").then(
                                 argument(ARG_ID, ResourceLocationArgumentConsumer::new(true)).then(
                                     argument(ARG_VALUE, BoundedNumArgumentConsumer::<f64>::new())
-                                        .then(literal("add_value").execute(AddModifierExecutor(
-                                            ModifierOperation::AddValue,
-                                        )))
+                                        .then(
+                                            literal("add_value")
+                                                .execute(AddModifierExecutor(Operation::AddValue)),
+                                        )
                                         .then(literal("add_multiplied_base").execute(
-                                            AddModifierExecutor(
-                                                ModifierOperation::AddMultipliedBase,
-                                            ),
+                                            AddModifierExecutor(Operation::AddMultipliedBase),
                                         ))
                                         .then(literal("add_multiplied_total").execute(
-                                            AddModifierExecutor(
-                                                ModifierOperation::AddMultipliedTotal,
-                                            ),
+                                            AddModifierExecutor(Operation::AddMultipliedTotal),
                                         )),
                                 ),
                             ),
@@ -414,18 +527,12 @@ pub fn init_command_tree() -> CommandTree {
                                     argument(ARG_ID, ResourceLocationArgumentConsumer::new(true))
                                         .then(
                                             argument(
-                                                ARG_ID,
-                                                ResourceLocationArgumentConsumer::new(true),
-                                            )
-                                            .then(
-                                                argument(
-                                                    ARG_SCALE,
-                                                    BoundedNumArgumentConsumer::<f64>::new(),
-                                                )
-                                                .execute(GetModifierExecutor),
+                                                ARG_SCALE,
+                                                BoundedNumArgumentConsumer::<f64>::new(),
                                             )
                                             .execute(GetModifierExecutor),
-                                        ),
+                                        )
+                                        .execute(GetModifierExecutor),
                                 ),
                             ),
                         ),
